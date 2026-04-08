@@ -1,0 +1,20 @@
+#!/bin/sh
+# Block commits containing real API keys
+
+PATTERNS="sk-[a-zA-Z0-9_-]{40,}|AIzaSy[a-zA-Z0-9_-]{30,}|pplx-[a-zA-Z0-9]{40,}|sb_publishable_[a-zA-Z0-9_-]{20,}"
+
+STAGED=$(git diff --cached --name-only)
+
+for FILE in $STAGED; do
+  [ -f "$FILE" ] || continue
+  if git show ":$FILE" | grep -Eq "$PATTERNS"; then
+    echo ""
+    echo "SECRET DETECTED in $FILE"
+    echo "Real API keys found. Remove them before committing."
+    echo "Use placeholders like: your-openai-api-key"
+    echo ""
+    exit 1
+  fi
+done
+
+exit 0
