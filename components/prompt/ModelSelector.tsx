@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import {
   Sparkles,
   MessageSquare,
@@ -9,27 +8,55 @@ import {
   Globe,
   Users,
   ImageIcon,
+  LayoutGrid,
   ChevronDown,
+  Wand2,
 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 import { MODEL_CONFIGS } from '@/config/models';
 import { cn } from '@/lib/utils';
-import type { ModelMode } from '@/types';
+import type { ModelMode, ImageProviderMode } from '@/types';
 
-// The 5 specific models shown when "Select Model" is active
-const SPECIFIC_MODELS: ModelMode[] = ['chatgpt', 'claude', 'gemini', 'perplexity', 'image'];
+const SPECIFIC_MODELS: ModelMode[] = ['chatgpt', 'claude', 'gemini', 'perplexity', 'all', 'image'];
 
 const ICONS: Record<ModelMode, React.ReactNode> = {
-  auto: <Sparkles className="w-3.5 h-3.5" />,
-  chatgpt: <MessageSquare className="w-3.5 h-3.5" />,
-  claude: <Brain className="w-3.5 h-3.5" />,
-  gemini: <Zap className="w-3.5 h-3.5" />,
+  auto:       <Sparkles className="w-3.5 h-3.5" />,
+  chatgpt:    <MessageSquare className="w-3.5 h-3.5" />,
+  claude:     <Brain className="w-3.5 h-3.5" />,
+  gemini:     <Zap className="w-3.5 h-3.5" />,
   perplexity: <Globe className="w-3.5 h-3.5" />,
-  debate: <Users className="w-3.5 h-3.5" />,
-  image: <ImageIcon className="w-3.5 h-3.5" />,
+  all:        <LayoutGrid className="w-3.5 h-3.5" />,
+  debate:     <Users className="w-3.5 h-3.5" />,
+  image:      <ImageIcon className="w-3.5 h-3.5" />,
 };
 
-// Map top-level selection to UI state
+// Image provider sub-selector config
+const IMAGE_PROVIDERS: {
+  id: ImageProviderMode;
+  label: string;
+  description: string;
+  activeColor: string;
+}[] = [
+  {
+    id: 'auto-image',
+    label: 'Auto',
+    description: 'Picks DALL-E or Imagen based on your prompt',
+    activeColor: 'bg-amber-500/20 border-amber-500 text-amber-300',
+  },
+  {
+    id: 'openai-image',
+    label: 'DALL-E 3',
+    description: 'Best for artistic styles, illustrations, and creative images',
+    activeColor: 'bg-emerald-500/20 border-emerald-500 text-emerald-300',
+  },
+  {
+    id: 'gemini-image',
+    label: 'Imagen 4',
+    description: 'Best for photorealistic images, portraits, and natural scenes',
+    activeColor: 'bg-blue-500/20 border-blue-500 text-blue-300',
+  },
+];
+
 type TopLevel = 'auto' | 'select' | 'debate';
 
 function getTopLevel(mode: ModelMode): TopLevel {
@@ -39,45 +66,45 @@ function getTopLevel(mode: ModelMode): TopLevel {
 }
 
 export function ModelSelector() {
-  const { selectedMode, setMode } = useAppStore();
+  const { selectedMode, selectedImageProvider, setMode, setImageProvider } = useAppStore();
   const activeConfig = MODEL_CONFIGS[selectedMode];
   const topLevel = getTopLevel(selectedMode);
 
   function handleTopLevel(choice: TopLevel) {
     if (choice === 'auto') setMode('auto');
     else if (choice === 'debate') setMode('debate');
-    // 'select' — keep current specific model, or default to chatgpt
     else if (choice === 'select') {
       if (getTopLevel(selectedMode) !== 'select') setMode('chatgpt');
     }
   }
 
-  const topOptions: { id: TopLevel; label: string; icon: React.ReactNode; description: string }[] = [
-    {
-      id: 'auto',
-      label: 'Auto',
-      icon: <Sparkles className="w-3.5 h-3.5" />,
-      description: 'Best model selected automatically for your prompt',
-    },
-    {
-      id: 'select',
-      label: 'Select Model',
-      icon: <ChevronDown className="w-3.5 h-3.5" />,
-      description: 'Choose a specific model to use',
-    },
-    {
-      id: 'debate',
-      label: 'Debate',
-      icon: <Users className="w-3.5 h-3.5" />,
-      description: 'All models answer, critique each other, and synthesize the best answer',
-    },
+  const topOptions: { id: TopLevel; label: string; icon: React.ReactNode }[] = [
+    { id: 'auto',   label: 'Auto',         icon: <Sparkles className="w-3.5 h-3.5" /> },
+    { id: 'select', label: 'Select Model', icon: <ChevronDown className="w-3.5 h-3.5" /> },
+    { id: 'debate', label: 'Debate',       icon: <Users className="w-3.5 h-3.5" /> },
   ];
 
   const topActiveColor: Record<TopLevel, string> = {
-    auto: 'bg-purple-500/20 border-purple-500 text-purple-300',
+    auto:   'bg-purple-500/20 border-purple-500 text-purple-300',
     select: 'bg-indigo-500/20 border-indigo-500 text-indigo-300',
     debate: 'bg-pink-500/20 border-pink-500 text-pink-300',
   };
+
+  // Description line — for image mode, describe the selected image provider
+  const imageProviderConfig =
+    selectedMode === 'image'
+      ? IMAGE_PROVIDERS.find((p) => p.id === selectedImageProvider)
+      : null;
+
+  const descriptionLabel = imageProviderConfig
+    ? `Image · ${imageProviderConfig.label}`
+    : activeConfig.label;
+
+  const descriptionText = imageProviderConfig
+    ? imageProviderConfig.description
+    : activeConfig.description;
+
+  const descriptionColor = imageProviderConfig ? 'text-amber-400' : activeConfig.color;
 
   return (
     <div className="space-y-3">
@@ -104,7 +131,7 @@ export function ModelSelector() {
         })}
       </div>
 
-      {/* Specific model sub-selector — only shown when "Select Model" is active */}
+      {/* Text model sub-selector */}
       {topLevel === 'select' && (
         <div className="flex flex-wrap gap-1.5 pl-1">
           {SPECIFIC_MODELS.map((mode) => {
@@ -130,11 +157,36 @@ export function ModelSelector() {
         </div>
       )}
 
-      {/* Description of active mode */}
+      {/* Image provider sub-selector — shown when Image is selected */}
+      {selectedMode === 'image' && (
+        <div className="flex flex-wrap gap-1.5 pl-1">
+          {IMAGE_PROVIDERS.map((provider) => {
+            const isActive = selectedImageProvider === provider.id;
+            return (
+              <button
+                key={provider.id}
+                onClick={() => setImageProvider(provider.id)}
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-150',
+                  isActive
+                    ? provider.activeColor
+                    : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 hover:bg-zinc-800',
+                )}
+                aria-pressed={isActive}
+              >
+                <Wand2 className="w-3 h-3" />
+                {provider.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Description */}
       <p className="text-xs text-zinc-500 pl-1">
-        <span className={cn('font-medium', activeConfig.color)}>{activeConfig.label}</span>
+        <span className={cn('font-medium', descriptionColor)}>{descriptionLabel}</span>
         {' — '}
-        {activeConfig.description}
+        {descriptionText}
       </p>
     </div>
   );

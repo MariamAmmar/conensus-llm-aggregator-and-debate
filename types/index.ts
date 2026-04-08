@@ -1,11 +1,18 @@
 // Model modes available in the UI
-export type ModelMode = 'auto' | 'chatgpt' | 'claude' | 'gemini' | 'perplexity' | 'debate' | 'image';
+export type ModelMode = 'auto' | 'chatgpt' | 'claude' | 'gemini' | 'perplexity' | 'all' | 'debate' | 'image';
 
 // Prompt classification categories used by the router
 export type PromptCategory = 'research' | 'logic' | 'writing' | 'image' | 'hybrid' | 'general';
 
 // Provider IDs
 export type ProviderId = 'openai' | 'anthropic' | 'gemini' | 'perplexity' | 'openai-image' | 'gemini-image';
+
+// Compute tier — controls which model variant is used within a provider
+// light: cheapest capable model  standard: general purpose  heavy: strongest model
+export type ComputeTier = 'light' | 'standard' | 'heavy';
+
+// Image provider selection (auto picks based on prompt style)
+export type ImageProviderMode = 'auto-image' | 'openai-image' | 'gemini-image';
 
 // Router decision output
 export interface RouterDecision {
@@ -92,13 +99,61 @@ export interface HistoryEntry {
   selectedProvider?: ProviderId;
 }
 
+// An image attached to a prompt
+export interface AttachedImage {
+  id: string;
+  name: string;
+  dataUrl: string; // base64 data URL (e.g. "data:image/png;base64,...")
+  mimeType: string;
+}
+
+// A single turn in a conversation
+export interface ConversationMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+// Per-provider conversation histories for All Models mode
+export type ProviderConversations = Partial<Record<ProviderId, ConversationMessage[]>>;
+
+// A single turn in the chat UI (prompt + result pair)
+export interface ChatTurn {
+  id: string;
+  prompt: string;
+  images: AttachedImage[];
+  mode: ModelMode;
+  result: AppResult | null;
+  error: string | null;
+  loading: boolean;
+}
+
+// A saved chat session (stored when starting a new chat)
+export interface ChatSession {
+  id: string;
+  title: string;
+  timestamp: Date;
+  mode: ModelMode;
+  turns: ChatTurn[];
+  conversation: ConversationMessage[];
+  providerConversations: ProviderConversations;
+  debateConversation: ConversationMessage[];
+}
+
 // App state
 export interface AppState {
   selectedMode: ModelMode;
+  selectedImageProvider: ImageProviderMode;
   prompt: string;
   isLoading: boolean;
-  currentResult: AppResult | null;
+  chatTurns: ChatTurn[];
   history: HistoryEntry[];
+  sessions: ChatSession[];
+  // Single-model / auto conversation (one assistant voice)
+  conversation: ConversationMessage[];
+  // Per-provider conversations for All Models mode
+  providerConversations: ProviderConversations;
+  // Debate shared conversation (uses synthesized answer as assistant turn)
+  debateConversation: ConversationMessage[];
   sidebarOpen: boolean;
   settingsOpen: boolean;
   mockMode: boolean;

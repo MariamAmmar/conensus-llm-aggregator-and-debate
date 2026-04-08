@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { ChevronDown, ChevronUp, Globe, Zap, GitBranch } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import type { RouterDecision, PromptCategory, ProviderId } from '@/types';
-import { cn } from '@/lib/utils';
 import { getProviderLabel } from '@/utils';
 
 interface RouterDecisionPanelProps {
@@ -31,7 +30,6 @@ const PROVIDER_COLORS: Record<ProviderId, string> = {
 
 export function RouterDecisionPanel({ decision }: RouterDecisionPanelProps) {
   const [expanded, setExpanded] = useState(false);
-  const confidencePct = Math.round(decision.confidence * 100);
 
   return (
     <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 overflow-hidden">
@@ -54,21 +52,6 @@ export function RouterDecisionPanel({ decision }: RouterDecisionPanelProps) {
           >
             {getProviderLabel(decision.selectedModel)}
           </Badge>
-
-          <span className="text-zinc-600 text-xs">·</span>
-
-          <span
-            className={cn(
-              'text-xs font-medium',
-              confidencePct >= 80
-                ? 'text-emerald-400'
-                : confidencePct >= 60
-                ? 'text-amber-400'
-                : 'text-red-400',
-            )}
-          >
-            {confidencePct}% confidence
-          </span>
 
           {decision.requiresWebGrounding && (
             <Badge variant="cyan" className="text-[11px] gap-1">
@@ -99,44 +82,15 @@ export function RouterDecisionPanel({ decision }: RouterDecisionPanelProps) {
           {expanded ? (
             <>Less <ChevronUp className="w-3 h-3" /></>
           ) : (
-            <>More <ChevronDown className="w-3 h-3" /></>
+            <>Why <ChevronDown className="w-3 h-3" /></>
           )}
         </button>
       </div>
 
-      {/* Expanded details */}
+      {/* Reason — shown inline below header when expanded */}
       {expanded && (
-        <div className="px-4 pb-4 border-t border-zinc-800 pt-3 space-y-2">
-          <div>
-            <p className="text-xs font-medium text-zinc-400 mb-1">Routing Reason</p>
-            <p className="text-xs text-zinc-500 leading-relaxed">{decision.reason}</p>
-          </div>
-          <div className="grid grid-cols-2 gap-3 mt-2 text-xs">
-            <div>
-              <span className="text-zinc-500">Web Grounding</span>
-              <span className={cn('ml-2 font-medium', decision.requiresWebGrounding ? 'text-cyan-400' : 'text-zinc-600')}>
-                {decision.requiresWebGrounding ? 'Yes' : 'No'}
-              </span>
-            </div>
-            <div>
-              <span className="text-zinc-500">Image Generation</span>
-              <span className={cn('ml-2 font-medium', decision.requiresImageGeneration ? 'text-amber-400' : 'text-zinc-600')}>
-                {decision.requiresImageGeneration ? 'Yes' : 'No'}
-              </span>
-            </div>
-            <div>
-              <span className="text-zinc-500">Debate Escalation</span>
-              <span className={cn('ml-2 font-medium', decision.escalateToDebate ? 'text-pink-400' : 'text-zinc-600')}>
-                {decision.escalateToDebate ? 'Yes' : 'No'}
-              </span>
-            </div>
-            <div>
-              <span className="text-zinc-500">Fallback Model</span>
-              <span className="ml-2 font-medium text-zinc-400">
-                {decision.fallbackModel ? getProviderLabel(decision.fallbackModel) : 'None'}
-              </span>
-            </div>
-          </div>
+        <div className="px-4 pb-3 border-t border-zinc-800 pt-3">
+          <p className="text-xs text-zinc-400 leading-relaxed">{decision.reason}</p>
         </div>
       )}
     </div>

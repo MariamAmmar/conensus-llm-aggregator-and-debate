@@ -46,6 +46,15 @@ export const MODEL_CONFIGS: Record<ModelMode, ModelConfig> = {
     icon: 'Globe',
     supportedCategories: ['research'],
   },
+  all: {
+    id: 'all',
+    label: 'All Models',
+    description: 'Query all models in parallel and compare responses side by side',
+    color: 'text-violet-400',
+    activeColor: 'bg-violet-500/20 border-violet-500 text-violet-300',
+    icon: 'LayoutGrid',
+    supportedCategories: ['research', 'logic', 'writing', 'general'],
+  },
   debate: {
     id: 'debate',
     label: 'Debate',
@@ -66,4 +75,4 @@ export const MODEL_CONFIGS: Record<ModelMode, ModelConfig> = {
   },
 };
 
-export const MODEL_ORDER: ModelMode[] = ['auto', 'chatgpt', 'claude', 'gemini', 'perplexity', 'debate', 'image'];
+export const MODEL_ORDER: ModelMode[] = ['auto', 'chatgpt', 'claude', 'gemini', 'perplexity', 'all', 'debate', 'image'];

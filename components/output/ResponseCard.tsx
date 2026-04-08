@@ -1,6 +1,7 @@
 'use client';
 
-import { Globe, AlertCircle, Clock } from 'lucide-react';
+import { useState } from 'react';
+import { Globe, AlertCircle, Clock, ThumbsUp } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import type { ModelResponse, ProviderId } from '@/types';
@@ -37,9 +38,22 @@ const PROVIDER_BADGE_VARIANT: Record<ProviderId, string> = {
 interface ResponseCardProps {
   response: ModelResponse;
   isLoading?: boolean;
+  onVote?: (provider: ProviderId) => Promise<void>;
+  voted?: ProviderId | null;
 }
 
-export function ResponseCard({ response, isLoading }: ResponseCardProps) {
+export function ResponseCard({ response, isLoading, onVote, voted }: ResponseCardProps) {
+  const [voting, setVoting] = useState(false);
+
+  async function handleVote() {
+    if (!onVote || voting || voted) return;
+    setVoting(true);
+    await onVote(response.provider);
+    setVoting(false);
+  }
+
+  const isVoted = voted === response.provider;
+  const someoneVoted = voted != null;
   if (isLoading) {
     return (
       <Card className={cn('border-l-2', PROVIDER_ACCENT[response.provider])}>
@@ -106,11 +120,30 @@ export function ResponseCard({ response, isLoading }: ResponseCardProps) {
           </div>
         </div>
       </CardHeader>
-      <CardContent className="pt-0">
+      <CardContent className="pt-0 space-y-3">
         <div
           className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap response-content"
           dangerouslySetInnerHTML={{ __html: formatResponseContent(response.content) }}
         />
+        {onVote && (
+          <div className="flex justify-end pt-1">
+            <button
+              onClick={handleVote}
+              disabled={voting || someoneVoted}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-150',
+                isVoted
+                  ? 'bg-emerald-500/20 border-emerald-500 text-emerald-300'
+                  : someoneVoted
+                  ? 'bg-zinc-900 border-zinc-800 text-zinc-600 cursor-not-allowed'
+                  : 'bg-zinc-900 border-zinc-700 text-zinc-400 hover:border-emerald-500/50 hover:text-emerald-400 hover:bg-emerald-500/10',
+              )}
+            >
+              <ThumbsUp className={cn('w-3 h-3', voting && 'animate-pulse')} />
+              {isVoted ? 'Best answer' : 'Vote'}
+            </button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
