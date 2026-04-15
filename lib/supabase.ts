@@ -49,3 +49,12 @@ export function createServerClient(accessToken: string): SupabaseClient {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 }
+
+// Admin client — bypasses RLS, for server-side usage tracking and subscription writes
+export function createAdminClient(): SupabaseClient {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+  if (!url || !serviceKey) return supabase;
+  return createClient(url, serviceKey, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}

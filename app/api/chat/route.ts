@@ -4,9 +4,80 @@ import { route } from '@/router';
 import { TEXT_PROVIDERS, IMAGE_PROVIDERS, resolveImageProvider } from '@/providers';
 import { runDebate } from '@/debate';
 import { generateId } from '@/utils';
+import { supabase, createAdminClient } from '@/lib/supabase';
+import { OWNER_EMAIL } from '@/lib/stripe';
+
+const FREE_QUERY_LIMIT = 5;
+
+function getIP(request: NextRequest): string {
+  return (
+    request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
+    request.headers.get('x-real-ip') ??
+    '127.0.0.1'
+  );
+}
 
 export async function POST(request: NextRequest) {
   const start = Date.now();
+
+  // ── Access control ─────────────────────────────────────────────────────────
+  const authHeader = request.headers.get('Authorization');
+  const token = authHeader?.replace('Bearer ', '') ?? '';
+  let userEmail: string | null = null;
+  let userId: string | null = null;
+
+  if (token) {
+    const { data } = await supabase.auth.getUser(token);
+    userEmail = data.user?.email ?? null;
+    userId = data.user?.id ?? null;
+  }
+
+  // Owner gets unlimited free access
+  const isOwner = userEmail === OWNER_EMAIL;
+
+  if (!isOwner) {
+    const admin = createAdminClient();
+
+    if (userId) {
+      // Logged-in user: check for active or trialing subscription
+      const { data: sub } = await admin
+        .from('user_subscriptions')
+        .select('status')
+        .eq('user_id', userId)
+        .single();
+
+      const hasAccess = sub && ['active', 'trialing'].includes(sub.status as string);
+      if (!hasAccess) {
+        return NextResponse.json(
+          { error: 'Subscription required', code: 'SUBSCRIPTION_REQUIRED' },
+          { status: 402 },
+        );
+      }
+    } else {
+      // Anonymous user: IP-based query limit
+      const ip = getIP(request);
+      const { data: usage } = await admin
+        .from('ip_usage')
+        .select('query_count')
+        .eq('ip', ip)
+        .single();
+
+      const queryCount = (usage?.query_count as number | null) ?? 0;
+      if (queryCount >= FREE_QUERY_LIMIT) {
+        return NextResponse.json(
+          { error: 'Free limit reached', code: 'LIMIT_REACHED', queriesUsed: queryCount },
+          { status: 429 },
+        );
+      }
+
+      // Increment count (upsert so first visit creates the row)
+      await admin.from('ip_usage').upsert(
+        { ip, query_count: queryCount + 1, updated_at: new Date().toISOString() },
+        { onConflict: 'ip' },
+      );
+    }
+  }
+  // ── End access control ─────────────────────────────────────────────────────
 
   try {
     const body = await request.json();

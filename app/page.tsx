@@ -9,7 +9,9 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { ModelSelector } from '@/components/prompt/ModelSelector';
 import { PromptInput } from '@/components/prompt/PromptInput';
 import { OutputPanel } from '@/components/output/OutputPanel';
-import { Sparkles, AlertCircle } from 'lucide-react';
+import { LoginModal } from '@/components/auth/LoginModal';
+import { TrialModal } from '@/components/auth/TrialModal';
+import { Sparkles, AlertCircle, CheckCircle } from 'lucide-react';
 import type { HistoryEntry, AppResult, ChatTurn, AttachedImage, AttachedDocument } from '@/types';
 import { generateId } from '@/utils';
 
@@ -54,9 +56,12 @@ export default function Home() {
     mergeMemoryFacts,
   } = useAppStore();
 
-  const { user } = useAuth();
+  const { user, session } = useAuth();
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const [showLoginGate, setShowLoginGate] = useState(false);
+  const [showTrialModal, setShowTrialModal] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
   // Pick a new funny prompt on each page load (after hydration to avoid SSR mismatch)
   const [rotatingPrompt, setRotatingPrompt] = useState(ROTATING_PROMPTS[0]);
   useEffect(() => {
@@ -90,6 +95,16 @@ export default function Home() {
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatTurns]);
+
+  // Handle Stripe redirect back
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('payment') === 'success') {
+      setPaymentSuccess(true);
+      window.history.replaceState({}, '', '/');
+      setTimeout(() => setPaymentSuccess(false), 5000);
+    }
+  }, []);
 
   function handleStop() {
     abortRef.current?.abort();
@@ -138,9 +153,12 @@ export default function Home() {
         };
         addHistoryEntry(historyEntry);
       } else {
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
+
         const res = await fetch('/api/chat', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           signal: abortRef.current.signal,
           body: JSON.stringify({
             prompt: submittedPrompt,
@@ -155,6 +173,18 @@ export default function Home() {
           }),
         });
         const data = await res.json();
+        if (res.status === 429 && data.code === 'LIMIT_REACHED') {
+          updateTurn(turnId, { loading: false, error: null });
+          setLoading(false);
+          setShowLoginGate(true);
+          return;
+        }
+        if (res.status === 402 && data.code === 'SUBSCRIPTION_REQUIRED') {
+          updateTurn(turnId, { loading: false, error: null });
+          setLoading(false);
+          setShowTrialModal(true);
+          return;
+        }
         if (!res.ok) throw new Error(data.message || data.error || 'Request failed');
 
         const result: AppResult = { ...data, timestamp: new Date(data.timestamp) };
@@ -224,6 +254,21 @@ export default function Home() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-zinc-950">
+      {showLoginGate && (
+        <LoginModal onClose={() => setShowLoginGate(false)} />
+      )}
+      {showTrialModal && session?.access_token && (
+        <TrialModal
+          accessToken={session.access_token}
+          onClose={() => setShowTrialModal(false)}
+        />
+      )}
+      {paymentSuccess && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex items-center gap-2 px-4 py-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-300 text-sm shadow-xl">
+          <CheckCircle className="w-4 h-4 shrink-0" />
+          Trial started! You now have unlimited access for 7 days.
+        </div>
+      )}
       <Sidebar />
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
