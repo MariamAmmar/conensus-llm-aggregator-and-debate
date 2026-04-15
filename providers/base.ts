@@ -1,4 +1,4 @@
-import type { ModelResponse, ImageResult, ProviderId, ComputeTier, ConversationMessage, AttachedImage } from '@/types';
+import type { ModelResponse, ImageResult, ProviderId, ComputeTier, ConversationMessage, AttachedImage, AttachedDocument } from '@/types';
 
 // Base interface all text providers must implement
 export interface TextProvider {
@@ -12,6 +12,7 @@ export interface TextProvider {
     computeTier?: ComputeTier,
     history?: ConversationMessage[],
     images?: AttachedImage[],
+    documents?: AttachedDocument[],
   ): Promise<ModelResponse>;
 }
 

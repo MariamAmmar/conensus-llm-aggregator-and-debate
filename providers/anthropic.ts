@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
 import type { TextProvider } from './base';
-import type { ModelResponse, ComputeTier, ConversationMessage, AttachedImage } from '@/types';
+import type { ModelResponse, ComputeTier, ConversationMessage, AttachedImage, AttachedDocument } from '@/types';
 
 const MODELS: Record<ComputeTier, string> = {
   light:    'claude-haiku-4-5-20251001',
@@ -20,7 +20,7 @@ export const anthropicProvider: TextProvider = {
   id: 'anthropic',
   name: 'Claude',
 
-  async complete(prompt, systemPrompt, maxTokens = 1024, computeTier = 'standard', history: ConversationMessage[] = [], images: AttachedImage[] = []): Promise<ModelResponse> {
+  async complete(prompt, systemPrompt, maxTokens = 1024, computeTier = 'standard', history: ConversationMessage[] = [], images: AttachedImage[] = [], documents: AttachedDocument[] = []): Promise<ModelResponse> {
     const start = Date.now();
     const model = MODELS[computeTier];
     try {
@@ -29,19 +29,38 @@ export const anthropicProvider: TextProvider = {
         ...history.map((msg) => ({ role: msg.role, content: msg.content } as Anthropic.MessageParam)),
       ];
 
-      // Build user content — text + optional images
-      if (images.length > 0) {
-        const content: Anthropic.ContentBlockParam[] = [
-          ...images.map((img): Anthropic.ImageBlockParam => ({
+      // Build user content — PDFs + images + text
+      const hasAttachments = images.length > 0 || documents.length > 0;
+      if (hasAttachments) {
+        const content: Anthropic.ContentBlockParam[] = [];
+
+        // PDF documents (Claude supports them natively)
+        for (const doc of documents) {
+          if (doc.contentType === 'pdf') {
+            content.push({
+              type: 'document',
+              source: {
+                type: 'base64',
+                media_type: 'application/pdf',
+                data: doc.content.split(',')[1], // strip data:application/pdf;base64,
+              },
+            } as unknown as Anthropic.ContentBlockParam);
+          }
+          // text docs are pre-injected into the prompt at the API route level
+        }
+
+        for (const img of images) {
+          content.push({
             type: 'image',
             source: {
               type: 'base64',
               media_type: img.mimeType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-              data: img.dataUrl.split(',')[1], // strip the data:mime;base64, prefix
+              data: img.dataUrl.split(',')[1],
             },
-          })),
-          { type: 'text', text: prompt },
-        ];
+          });
+        }
+
+        content.push({ type: 'text', text: prompt });
         messages.push({ role: 'user', content });
       } else {
         messages.push({ role: 'user', content: prompt });

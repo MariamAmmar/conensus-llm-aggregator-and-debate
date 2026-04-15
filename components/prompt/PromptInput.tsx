@@ -1,11 +1,11 @@
 'use client';
 
 import { useRef, useEffect, useState, KeyboardEvent } from 'react';
-import { Send, Square, Paperclip, X } from 'lucide-react';
+import { Send, Square, Paperclip, X, FileText, FileType } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
-import type { ModelMode, AttachedImage } from '@/types';
+import type { ModelMode, AttachedImage, AttachedDocument } from '@/types';
 import { generateId } from '@/utils';
 
 const PLACEHOLDERS: Record<ModelMode, string> = {
@@ -23,8 +23,25 @@ const PLACEHOLDERS: Record<ModelMode, string> = {
   image: 'Describe the image you want to generate...',
 };
 
+// File extensions treated as plain text
+const TEXT_EXTENSIONS = new Set([
+  'txt', 'md', 'markdown', 'csv', 'json', 'html', 'htm', 'xml',
+  'yaml', 'yml', 'toml', 'ini', 'log', 'py', 'js', 'ts', 'tsx',
+  'jsx', 'css', 'sh', 'bash', 'env', 'sql', 'rs', 'go', 'java',
+  'c', 'cpp', 'h', 'rb', 'php', 'swift', 'kt', 'r',
+]);
+
+function getFileCategory(file: File): 'image' | 'pdf' | 'text' | null {
+  if (file.type.startsWith('image/')) return 'image';
+  if (file.type === 'application/pdf') return 'pdf';
+  const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+  if (TEXT_EXTENSIONS.has(ext)) return 'text';
+  if (file.type.startsWith('text/')) return 'text';
+  return null;
+}
+
 interface PromptInputProps {
-  onSubmit: (prompt: string, images: AttachedImage[]) => void;
+  onSubmit: (prompt: string, images: AttachedImage[], documents: AttachedDocument[]) => void;
   onStop?: () => void;
 }
 
@@ -33,6 +50,7 @@ export function PromptInput({ onSubmit, onStop }: PromptInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [images, setImages] = useState<AttachedImage[]>([]);
+  const [documents, setDocuments] = useState<AttachedDocument[]>([]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -56,29 +74,53 @@ export function PromptInput({ onSubmit, onStop }: PromptInputProps) {
 
   function handleSubmit() {
     if (!prompt.trim() || isLoading) return;
-    onSubmit(prompt.trim(), images);
+    onSubmit(prompt.trim(), images, documents);
     setImages([]);
+    setDocuments([]);
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
     files.forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const dataUrl = reader.result as string;
-        setImages((prev) => [
-          ...prev,
-          { id: generateId(), name: file.name, dataUrl, mimeType: file.type },
-        ]);
-      };
-      reader.readAsDataURL(file);
+      const category = getFileCategory(file);
+      if (category === 'image') {
+        const reader = new FileReader();
+        reader.onload = () => {
+          setImages((prev) => [
+            ...prev,
+            { id: generateId(), name: file.name, dataUrl: reader.result as string, mimeType: file.type },
+          ]);
+        };
+        reader.readAsDataURL(file);
+      } else if (category === 'text') {
+        const reader = new FileReader();
+        reader.onload = () => {
+          setDocuments((prev) => [
+            ...prev,
+            { id: generateId(), name: file.name, mimeType: file.type || 'text/plain', contentType: 'text', content: reader.result as string },
+          ]);
+        };
+        reader.readAsText(file);
+      } else if (category === 'pdf') {
+        const reader = new FileReader();
+        reader.onload = () => {
+          setDocuments((prev) => [
+            ...prev,
+            { id: generateId(), name: file.name, mimeType: 'application/pdf', contentType: 'pdf', content: reader.result as string },
+          ]);
+        };
+        reader.readAsDataURL(file);
+      }
     });
-    // Reset so same file can be re-attached
     e.target.value = '';
   }
 
   function removeImage(id: string) {
     setImages((prev) => prev.filter((img) => img.id !== id));
+  }
+
+  function removeDocument(id: string) {
+    setDocuments((prev) => prev.filter((doc) => doc.id !== id));
   }
 
   const charCount = prompt.length;
@@ -103,6 +145,30 @@ export function PromptInput({ onSubmit, onStop }: PromptInputProps) {
                 className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-zinc-700 border border-zinc-600 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
               >
                 <X className="w-2.5 h-2.5 text-zinc-300" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Document chips */}
+      {documents.length > 0 && (
+        <div className="flex flex-wrap gap-2 px-1">
+          {documents.map((doc) => (
+            <div
+              key={doc.id}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-300 max-w-[180px] group"
+            >
+              {doc.contentType === 'pdf'
+                ? <FileType className="w-3.5 h-3.5 text-red-400 shrink-0" />
+                : <FileText className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+              }
+              <span className="truncate">{doc.name}</span>
+              <button
+                onClick={() => removeDocument(doc.id)}
+                className="ml-auto shrink-0 text-zinc-600 hover:text-zinc-300 transition-colors"
+              >
+                <X className="w-3 h-3" />
               </button>
             </div>
           ))}
@@ -139,7 +205,7 @@ export function PromptInput({ onSubmit, onStop }: PromptInputProps) {
                 <button
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isLoading}
-                  title="Attach image"
+                  title="Attach image, PDF, or document"
                   className="p-1.5 rounded-lg text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
                 >
                   <Paperclip className="w-4 h-4" />
@@ -147,7 +213,7 @@ export function PromptInput({ onSubmit, onStop }: PromptInputProps) {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/*,.pdf,.txt,.md,.csv,.json,.html,.htm,.xml,.yaml,.yml,.log,.py,.js,.ts,.tsx,.jsx,.css,.sh,.sql,.env,.toml"
                   multiple
                   className="hidden"
                   onChange={handleFileChange}

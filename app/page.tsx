@@ -10,7 +10,7 @@ import { ModelSelector } from '@/components/prompt/ModelSelector';
 import { PromptInput } from '@/components/prompt/PromptInput';
 import { OutputPanel } from '@/components/output/OutputPanel';
 import { Sparkles, AlertCircle } from 'lucide-react';
-import type { HistoryEntry, AppResult, ChatTurn, AttachedImage } from '@/types';
+import type { HistoryEntry, AppResult, ChatTurn, AttachedImage, AttachedDocument } from '@/types';
 import { generateId } from '@/utils';
 
 const ROTATING_PROMPTS = [
@@ -101,7 +101,7 @@ export default function Home() {
     setLoading(false);
   }
 
-  async function handleSubmit(submittedPrompt: string, images: AttachedImage[]) {
+  async function handleSubmit(submittedPrompt: string, images: AttachedImage[], documents: AttachedDocument[]) {
     if (!submittedPrompt.trim() || isLoading) return;
 
     const turnId = generateId();
@@ -109,6 +109,7 @@ export default function Home() {
       id: turnId,
       prompt: submittedPrompt,
       images,
+      documents,
       mode: selectedMode,
       result: null,
       error: null,
@@ -149,6 +150,7 @@ export default function Home() {
             providerConversations,
             debateConversation,
             images,
+            documents,
             userMemory: userMemory.map((f) => f.fact),
           }),
         });

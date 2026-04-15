@@ -107,6 +107,17 @@ export interface AttachedImage {
   mimeType: string;
 }
 
+// A document (PDF or text-based file) attached to a prompt
+export interface AttachedDocument {
+  id: string;
+  name: string;
+  mimeType: string;
+  contentType: 'text' | 'pdf';
+  // For text files: the extracted text content
+  // For PDFs: the full base64 data URL (data:application/pdf;base64,...)
+  content: string;
+}
+
 // A single turn in a conversation
 export interface ConversationMessage {
   role: 'user' | 'assistant';
@@ -121,6 +132,7 @@ export interface ChatTurn {
   id: string;
   prompt: string;
   images: AttachedImage[];
+  documents: AttachedDocument[];
   mode: ModelMode;
   result: AppResult | null;
   error: string | null;

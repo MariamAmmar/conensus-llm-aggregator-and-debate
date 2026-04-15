@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { ModelMode, ImageProviderMode, AppResult, ModelResponse, ComputeTier, ConversationMessage, ProviderConversations, AttachedImage } from '@/types';
+import type { ModelMode, ImageProviderMode, AppResult, ModelResponse, ComputeTier, ConversationMessage, ProviderConversations, AttachedImage, AttachedDocument } from '@/types';
 import { route } from '@/router';
 import { TEXT_PROVIDERS, IMAGE_PROVIDERS, resolveImageProvider } from '@/providers';
 import { runDebate } from '@/debate';
@@ -10,7 +10,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { prompt, mode, imageProvider = 'auto-image', history = [], providerConversations = {}, debateConversation = [], images = [], userMemory = [] } = body as {
+    const { prompt, mode, imageProvider = 'auto-image', history = [], providerConversations = {}, debateConversation = [], images = [], documents = [], userMemory = [] } = body as {
       prompt: string;
       mode: ModelMode;
       imageProvider: ImageProviderMode;
@@ -18,8 +18,21 @@ export async function POST(request: NextRequest) {
       providerConversations: ProviderConversations;
       debateConversation: ConversationMessage[];
       images: AttachedImage[];
+      documents: AttachedDocument[];
       userMemory: string[];
     };
+
+    // Inject text document contents into the prompt so all providers benefit
+    const textDocContext = documents
+      .filter((d) => d.contentType === 'text')
+      .map((d) => `<document name="${d.name}">\n${d.content}\n</document>`)
+      .join('\n\n');
+    const augmentedPrompt = textDocContext
+      ? `${textDocContext}\n\n${prompt}`
+      : prompt;
+
+    // PDFs are passed directly to providers that support them (Anthropic)
+    const pdfDocs = documents.filter((d) => d.contentType === 'pdf');
 
     // Base identity prompt — tells each model what platform it's operating within
     const BASE_SYSTEM_PROMPT = `You are an AI assistant running inside Consensus AI, a multi-model platform that routes user questions to the best AI model and lets users compare responses side by side.
@@ -103,7 +116,8 @@ Answer naturally and conversationally — do not recite this as a list unless th
           const provider = TEXT_PROVIDERS[pid];
           if (!provider) return null;
           const providerHistory = providerConversations[pid] ?? [];
-          return provider.complete(prompt, systemPrefix, 1024, 'standard', providerHistory, images);
+          const docs = pid === 'anthropic' ? pdfDocs : [];
+          return provider.complete(augmentedPrompt, systemPrefix, 1024, 'standard', providerHistory, images, docs);
         }),
       );
 
@@ -127,7 +141,7 @@ Answer naturally and conversationally — do not recite this as a list unless th
     // ── Debate mode ──────────────────────────────────────────────────────────
     if (mode === 'debate') {
       // All models share the debate conversation (synthesized answer as context)
-      const debateResult = await runDebate(prompt, debateConversation, systemPrefix);
+      const debateResult = await runDebate(augmentedPrompt, debateConversation, systemPrefix);
 
       const result: AppResult = {
         id,
@@ -145,7 +159,7 @@ Answer naturally and conversationally — do not recite this as a list unless th
     }
 
     // ── Auto + single model modes ────────────────────────────────────────────
-    const routerDecision = route(prompt, mode);
+    const routerDecision = route(augmentedPrompt, mode);
     const providerId = routerDecision.selectedModel;
 
     // Auto-routed to an image provider
@@ -197,13 +211,15 @@ Answer naturally and conversationally — do not recite this as a list unless th
     // In auto mode use the router's compute tier; manual mode defaults to standard
     const tier: ComputeTier = (routerDecision as { computeTier?: ComputeTier }).computeTier ?? 'standard';
 
-    let response = await provider.complete(prompt, systemPrefix, 1024, tier, history, images);
+    const providerDocs = providerId === 'anthropic' ? pdfDocs : [];
+    let response = await provider.complete(augmentedPrompt, systemPrefix, 1024, tier, history, images, providerDocs);
 
     // Fallback if primary provider errored
     if (response.error && routerDecision.fallbackModel) {
       const fallback = TEXT_PROVIDERS[routerDecision.fallbackModel];
       if (fallback) {
-        response = await fallback.complete(prompt, systemPrefix, 1024, tier, history, images);
+        const fallbackDocs = routerDecision.fallbackModel === 'anthropic' ? pdfDocs : [];
+        response = await fallback.complete(augmentedPrompt, systemPrefix, 1024, tier, history, images, fallbackDocs);
       }
     }
 
