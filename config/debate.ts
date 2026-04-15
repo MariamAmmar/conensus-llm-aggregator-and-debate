@@ -1,7 +1,7 @@
 // Debate mode configuration
 export const DEBATE_CONFIG = {
   // Models participating in debate
-  participants: ['openai', 'anthropic', 'gemini', 'perplexity'] as const,
+  participants: ['openai', 'anthropic', 'gemini', 'perplexity', 'grok', 'llama', 'o4mini', 'deepseek'] as const,
 
   // Max tokens per response
   maxResponseTokens: 1024,

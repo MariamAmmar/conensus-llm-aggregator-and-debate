@@ -24,6 +24,10 @@ const PROVIDER_COLORS: Record<ProviderId, string> = {
   anthropic: 'orange',
   gemini: 'info',
   perplexity: 'cyan',
+  grok: 'destructive',
+  llama: 'success',
+  o4mini: 'info',
+  deepseek: 'cyan',
   'openai-image': 'warning',
   'gemini-image': 'info',
 };

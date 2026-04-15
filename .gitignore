@@ -32,6 +32,12 @@ yarn-error.log*
 # vercel
 .vercel
 
+# Claude local memory
+/memory/
+
+# cursor
+.cursor/
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

@@ -5,7 +5,7 @@ import type { ModelResponse, ComputeTier, ConversationMessage, AttachedImage } f
 const MODELS: Record<ComputeTier, string> = {
   light:    'claude-haiku-4-5-20251001',
   standard: 'claude-sonnet-4-6',
-  heavy:    'claude-sonnet-4-6',
+  heavy:    'claude-opus-4-5',
 };
 
 const TIMEOUT_MS = 30_000;

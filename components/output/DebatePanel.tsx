@@ -1,11 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Trophy, ChevronDown, ChevronUp, MessageCircle } from 'lucide-react';
+import { Trophy, Info, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ResponseCard } from '@/components/output/ResponseCard';
-import { Separator } from '@/components/ui/separator';
 import type { DebateResult, ProviderId } from '@/types';
 import { getProviderLabel } from '@/utils';
 import { cn } from '@/lib/utils';
@@ -25,17 +24,21 @@ const SCORE_DIMENSIONS = [
 ] as const;
 
 const WINNER_COLORS: Record<ProviderId, string> = {
-  openai: 'text-emerald-400 border-emerald-500',
-  anthropic: 'text-orange-400 border-orange-500',
-  gemini: 'text-blue-400 border-blue-500',
-  perplexity: 'text-cyan-400 border-cyan-500',
-  'openai-image': 'text-amber-400 border-amber-500',
-  'gemini-image': 'text-blue-400 border-blue-500',
+  openai: 'text-emerald-400',
+  anthropic: 'text-orange-400',
+  gemini: 'text-blue-400',
+  perplexity: 'text-cyan-400',
+  grok: 'text-rose-400',
+  llama: 'text-lime-400',
+  o4mini: 'text-sky-400',
+  deepseek: 'text-violet-400',
+  'openai-image': 'text-amber-400',
+  'gemini-image': 'text-blue-400',
 };
 
-export function DebatePanel({ debateResult, prompt }: DebatePanelProps) {
-  const [critiquesExpanded, setCritiquesExpanded] = useState(false);
-  const { responses, critiques, scores, winner, synthesizedAnswer, synthesisReasoning } = debateResult;
+export function DebatePanel({ debateResult }: DebatePanelProps) {
+  const [showInfo, setShowInfo] = useState(false);
+  const { responses, scores, winner, synthesizedAnswer, synthesisReasoning } = debateResult;
 
   const winnerScore = scores.find((s) => s.provider === winner);
 
@@ -134,65 +137,50 @@ export function DebatePanel({ debateResult, prompt }: DebatePanelProps) {
         </CardContent>
       </Card>
 
-      {/* Critiques (collapsible) */}
-      <div className="rounded-xl border border-zinc-800 overflow-hidden">
-        <button
-          onClick={() => setCritiquesExpanded(!critiquesExpanded)}
-          className="w-full flex items-center justify-between px-4 py-3 hover:bg-zinc-800/40 transition-colors"
-        >
-          <div className="flex items-center gap-2">
-            <MessageCircle className="w-4 h-4 text-zinc-500" />
-            <span className="text-sm text-zinc-400 font-medium">Model Critiques</span>
-            <Badge variant="secondary" className="text-[10px]">{critiques.length}</Badge>
-          </div>
-          {critiquesExpanded ? (
-            <ChevronUp className="w-4 h-4 text-zinc-500" />
-          ) : (
-            <ChevronDown className="w-4 h-4 text-zinc-500" />
-          )}
-        </button>
-
-        {critiquesExpanded && (
-          <div className="border-t border-zinc-800">
-            <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-3">
-              {critiques.map((critique, i) => (
-                <div
-                  key={i}
-                  className="rounded-lg bg-zinc-800/50 border border-zinc-800 p-3 space-y-1.5"
-                >
-                  <div className="flex items-center gap-1.5 text-xs">
-                    <span className="text-zinc-300 font-medium">{getProviderLabel(critique.critic)}</span>
-                    <span className="text-zinc-600">on</span>
-                    <span className="text-zinc-400">{getProviderLabel(critique.target)}</span>
-                  </div>
-                  <p className="text-xs text-zinc-500 leading-relaxed">{critique.content}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Synthesized answer (winner) */}
+      {/* Synthesized answer */}
       <Card className="border-amber-500/30">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
             <CardTitle className="text-sm flex items-center gap-2">
               <Trophy className="w-4 h-4 text-amber-400" />
               Synthesized Answer
+              {/* Info icon */}
+              <button
+                onClick={() => setShowInfo(!showInfo)}
+                className="ml-1 text-zinc-600 hover:text-zinc-300 transition-colors"
+                title="How this answer was made"
+              >
+                {showInfo ? <X className="w-3.5 h-3.5" /> : <Info className="w-3.5 h-3.5" />}
+              </button>
             </CardTitle>
             <div className="flex items-center gap-2">
               <span className="text-xs text-zinc-500">Winner:</span>
-              <Badge
-                variant="warning"
-                className={cn('text-xs', winnerScore ? '' : '')}
-              >
-                {getProviderLabel(winner)} · {winnerScore?.totalScore.toFixed(2)}
+              <Badge variant="warning" className="text-xs">
+                <span className={WINNER_COLORS[winner]}>{getProviderLabel(winner)}</span>
+                <span className="ml-1 text-amber-300">· {winnerScore?.totalScore.toFixed(2)}</span>
               </Badge>
             </div>
           </div>
+
+          {/* How it was made — expands on info click */}
+          {showInfo && (
+            <div className="mt-3 rounded-lg bg-zinc-800/60 border border-zinc-700/50 p-3 space-y-1.5 text-xs text-zinc-400 leading-relaxed">
+              <p>
+                <span className="text-zinc-200 font-medium">How this answer was synthesized:</span>
+              </p>
+              <ol className="list-decimal list-inside space-y-1 text-zinc-400">
+                <li>All {responses.length} models answered your prompt independently.</li>
+                <li>Each model scored every other model across 6 dimensions — no self-scoring.</li>
+                <li><span className={cn('font-medium', WINNER_COLORS[winner])}>{getProviderLabel(winner)}</span> won with the highest peer-averaged score of <span className="text-amber-400">{winnerScore?.totalScore.toFixed(2)}</span>.</li>
+                <li>The winner then rewrote its answer, incorporating the best insights from all other responses.</li>
+              </ol>
+              {synthesisReasoning && (
+                <p className="text-zinc-500 pt-1 border-t border-zinc-700/50">{synthesisReasoning}</p>
+              )}
+            </div>
+          )}
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent>
           <div
             className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap response-content"
             dangerouslySetInnerHTML={{
@@ -200,16 +188,6 @@ export function DebatePanel({ debateResult, prompt }: DebatePanelProps) {
                 .replace(/\*\*(.*?)\*\*/g, '<strong class="text-zinc-100 font-semibold">$1</strong>')
             }}
           />
-
-          {synthesisReasoning && (
-            <>
-              <Separator />
-              <div>
-                <p className="text-xs font-medium text-zinc-500 mb-1.5">Synthesis Reasoning</p>
-                <p className="text-xs text-zinc-500 leading-relaxed">{synthesisReasoning}</p>
-              </div>
-            </>
-          )}
         </CardContent>
       </Card>
     </div>

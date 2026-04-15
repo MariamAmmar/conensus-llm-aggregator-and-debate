@@ -1,6 +1,7 @@
 'use client';
 
-import { Trash2, MessageSquare, Brain, Zap, Globe, Users, ImageIcon, Sparkles, X, Plus, LayoutGrid } from 'lucide-react';
+import { useState } from 'react';
+import { Trash2, MessageSquare, Brain, Zap, Globe, Users, ImageIcon, Sparkles, X, Plus, LayoutGrid, BookOpen, ChevronDown, ChevronUp, Flame, Box, Cpu, GitBranch } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { useAppStore } from '@/lib/store';
@@ -14,6 +15,10 @@ const MODE_ICONS: Record<ModelMode, React.ReactNode> = {
   claude: <Brain className="w-3 h-3" />,
   gemini: <Zap className="w-3 h-3" />,
   perplexity: <Globe className="w-3 h-3" />,
+  grok: <Flame className="w-3 h-3" />,
+  llama: <Box className="w-3 h-3" />,
+  o4mini: <Cpu className="w-3 h-3" />,
+  deepseek: <GitBranch className="w-3 h-3" />,
   all: <LayoutGrid className="w-3 h-3" />,
   debate: <Users className="w-3 h-3" />,
   image: <ImageIcon className="w-3 h-3" />,
@@ -25,6 +30,10 @@ const MODE_COLORS: Record<ModelMode, string> = {
   claude: 'text-orange-400',
   gemini: 'text-blue-400',
   perplexity: 'text-cyan-400',
+  grok: 'text-rose-400',
+  llama: 'text-lime-400',
+  o4mini: 'text-sky-400',
+  deepseek: 'text-violet-400',
   all: 'text-violet-400',
   debate: 'text-pink-400',
   image: 'text-amber-400',
@@ -69,9 +78,11 @@ function SessionItem({
 }
 
 export function Sidebar() {
+  const [memoryExpanded, setMemoryExpanded] = useState(false);
   const {
     sidebarOpen,
     sessions,
+    userMemory,
     toggleSidebar,
     loadSession,
     deleteSession,
@@ -81,6 +92,7 @@ export function Sidebar() {
     clearConversation,
     clearProviderConversations,
     clearDebateConversation,
+    clearMemory,
     chatTurns,
   } = useAppStore();
 
@@ -129,6 +141,40 @@ export function Sidebar() {
             New Chat
           </Button>
         </div>
+
+        {/* Memory panel */}
+        {userMemory.length > 0 && (
+          <div className="border-b border-zinc-800">
+            <button
+              onClick={() => setMemoryExpanded(!memoryExpanded)}
+              className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-zinc-800/40 transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <BookOpen className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="text-xs font-medium text-zinc-300">Memory</span>
+                <span className="text-[10px] text-zinc-600">{userMemory.length} facts</span>
+              </div>
+              {memoryExpanded
+                ? <ChevronUp className="w-3 h-3 text-zinc-600" />
+                : <ChevronDown className="w-3 h-3 text-zinc-600" />}
+            </button>
+            {memoryExpanded && (
+              <div className="px-3 pb-3 space-y-1.5">
+                {userMemory.map((m, i) => (
+                  <p key={i} className="text-[11px] text-zinc-400 leading-snug pl-2 border-l border-zinc-700">
+                    {m.fact}
+                  </p>
+                ))}
+                <button
+                  onClick={clearMemory}
+                  className="text-[11px] text-zinc-600 hover:text-red-400 transition-colors mt-1"
+                >
+                  Clear memory
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Sessions list */}
         <ScrollArea className="flex-1 px-2 py-2">

@@ -1,11 +1,11 @@
 // Model modes available in the UI
-export type ModelMode = 'auto' | 'chatgpt' | 'claude' | 'gemini' | 'perplexity' | 'all' | 'debate' | 'image';
+export type ModelMode = 'auto' | 'chatgpt' | 'claude' | 'gemini' | 'perplexity' | 'grok' | 'llama' | 'o4mini' | 'deepseek' | 'all' | 'debate' | 'image';
 
 // Prompt classification categories used by the router
 export type PromptCategory = 'research' | 'logic' | 'writing' | 'image' | 'hybrid' | 'general';
 
 // Provider IDs
-export type ProviderId = 'openai' | 'anthropic' | 'gemini' | 'perplexity' | 'openai-image' | 'gemini-image';
+export type ProviderId = 'openai' | 'anthropic' | 'gemini' | 'perplexity' | 'grok' | 'llama' | 'o4mini' | 'deepseek' | 'openai-image' | 'gemini-image';
 
 // Compute tier — controls which model variant is used within a provider
 // light: cheapest capable model  standard: general purpose  heavy: strongest model
@@ -139,6 +139,12 @@ export interface ChatSession {
   debateConversation: ConversationMessage[];
 }
 
+// A remembered fact about the user extracted from past conversations
+export interface MemoryFact {
+  fact: string;
+  addedAt: string; // ISO date string
+}
+
 // App state
 export interface AppState {
   selectedMode: ModelMode;
@@ -148,6 +154,8 @@ export interface AppState {
   chatTurns: ChatTurn[];
   history: HistoryEntry[];
   sessions: ChatSession[];
+  activeSessionId: string | null;
+  userMemory: MemoryFact[];
   // Single-model / auto conversation (one assistant voice)
   conversation: ConversationMessage[];
   // Per-provider conversations for All Models mode

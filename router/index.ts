@@ -19,6 +19,10 @@ export function route(prompt: string, mode: ModelMode): RouterDecision {
       claude: 'anthropic',
       gemini: 'gemini',
       perplexity: 'perplexity',
+      grok: 'grok',
+      llama: 'llama',
+      o4mini: 'o4mini',
+      deepseek: 'deepseek',
       image: 'openai-image',
     };
 

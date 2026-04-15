@@ -15,9 +15,9 @@ const SCORE_DIMENSIONS = [
   'usefulness',
 ] as const;
 
-export async function runDebate(prompt: string, history: ConversationMessage[] = []): Promise<DebateResult> {
+export async function runDebate(prompt: string, history: ConversationMessage[] = [], memoryContext = ''): Promise<DebateResult> {
   // Round 1: all models answer in parallel (each sees the shared debate history)
-  const allResponses = await collectResponses(prompt, history);
+  const allResponses = await collectResponses(prompt, history, memoryContext);
 
   // Filter out error responses before scoring — failed models shouldn't influence results
   const responses = allResponses.filter((r) => !r.error && r.content.trim().length > 0);
@@ -33,7 +33,7 @@ export async function runDebate(prompt: string, history: ConversationMessage[] =
   const winner = determineWinner(scores);
 
   // Round 4: winner synthesizes a final answer (with conversation history for context)
-  const { synthesizedAnswer, synthesisReasoning } = await synthesize(prompt, responses, scores, winner, history);
+  const { synthesizedAnswer, synthesisReasoning } = await synthesize(prompt, responses, scores, winner, history, memoryContext);
 
   return {
     responses: allResponses, // include errors so UI can show them
@@ -45,12 +45,12 @@ export async function runDebate(prompt: string, history: ConversationMessage[] =
   };
 }
 
-async function collectResponses(prompt: string, history: ConversationMessage[]): Promise<ModelResponse[]> {
+async function collectResponses(prompt: string, history: ConversationMessage[], memoryContext = ''): Promise<ModelResponse[]> {
   const results = await Promise.all(
     PARTICIPANTS.map(async (pid) => {
       const provider = TEXT_PROVIDERS[pid];
       if (!provider) return null;
-      return provider.complete(prompt, undefined, DEBATE_CONFIG.maxResponseTokens, 'standard', history);
+      return provider.complete(prompt, memoryContext || undefined, DEBATE_CONFIG.maxResponseTokens, 'standard', history);
     }),
   );
   return results.filter(Boolean) as ModelResponse[];
@@ -59,7 +59,7 @@ async function collectResponses(prompt: string, history: ConversationMessage[]):
 async function crossJudgeScore(prompt: string, responses: ModelResponse[]): Promise<ResponseScore[]> {
   // Each provider scores every response except its own (light/cheap tier)
   // Shape: scoresByProvider[judge][target] = score object
-  const allJudgements: Array<Record<ProviderId, number>[]> = [];
+  const allJudgements: ScoringEntry[][] = [];
 
   // Only use models that successfully responded as judges
   const validJudges = responses.filter((r) => !r.error && r.content.trim().length > 0).map((r) => r.provider);
@@ -130,10 +130,12 @@ Return ONLY valid JSON in exactly this format (no markdown, no explanation):
 }`;
 }
 
+type ScoringEntry = { provider: ProviderId; factualGrounding: number; logicalCoherence: number; completeness: number; clarity: number; confidenceCalibration: number; usefulness: number };
+
 function parseScoringResponse(
   content: string,
   targets: ModelResponse[],
-): Record<ProviderId, number>[] | null {
+): ScoringEntry[] | null {
   try {
     // Strip markdown code fences if present
     const cleaned = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
@@ -159,7 +161,7 @@ function parseScoringResponse(
 
 function aggregateScores(
   responses: ModelResponse[],
-  allJudgements: Array<Record<ProviderId, number>[]>,
+  allJudgements: ScoringEntry[][],
 ): ResponseScore[] {
   return responses.map((response) => {
     const pid = response.provider;
@@ -167,7 +169,7 @@ function aggregateScores(
     // Collect all scores given to this provider by other judges
     const received = allJudgements
       .flat()
-      .filter((s) => (s as unknown as { provider: ProviderId }).provider === pid);
+      .filter((s) => s.provider === pid);
 
     if (received.length === 0) {
       // Fallback if no scores received — neutral 7
@@ -184,8 +186,8 @@ function aggregateScores(
       };
     }
 
-    const avg = (key: string) =>
-      round(received.reduce((sum, s) => sum + ((s as Record<string, number>)[key] ?? 5), 0) / received.length);
+    const avg = (key: keyof ScoringEntry) =>
+      round(received.reduce((sum, s) => sum + (typeof s[key] === 'number' ? (s[key] as number) : 5), 0) / received.length);
 
     const factualGrounding = avg('factualGrounding');
     const logicalCoherence = avg('logicalCoherence');
@@ -222,6 +224,7 @@ async function synthesize(
   scores: ResponseScore[],
   winner: ProviderId,
   history: ConversationMessage[],
+  memoryContext = '',
 ): Promise<{ synthesizedAnswer: string; synthesisReasoning: string }> {
   const provider = TEXT_PROVIDERS[winner];
   if (!provider) {
@@ -258,9 +261,14 @@ Instructions:
 5. Do not mention the other models, scores, or that this is a synthesis — write as if it is one authoritative answer
 6. Be thorough but not padded — every sentence should add value`;
 
+  const systemPrompt = [
+    memoryContext,
+    'You are synthesizing the best answer from multiple AI responses. Be direct and comprehensive.',
+  ].filter(Boolean).join('\n\n');
+
   const result = await provider.complete(
     synthesisPrompt,
-    'You are synthesizing the best answer from multiple AI responses. Be direct and comprehensive.',
+    systemPrompt,
     DEBATE_CONFIG.maxSynthesisTokens,
     'standard',
     history,

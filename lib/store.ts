@@ -1,7 +1,14 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import type { AppState, ModelMode, HistoryEntry, ImageProviderMode, ProviderId, ChatTurn, AttachedImage, ChatSession } from '@/types';
+import type { AppState, ModelMode, HistoryEntry, ImageProviderMode, ProviderId, ChatTurn, AttachedImage, ChatSession, MemoryFact } from '@/types';
 import { generateId } from '@/utils';
+import { supabase } from './supabase';
+
+async function getAuthHeader(): Promise<Record<string, string>> {
+  const { data } = await supabase.auth.getSession();
+  const token = data.session?.access_token;
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 interface AppActions {
   setMode: (mode: ModelMode) => void;
@@ -19,6 +26,9 @@ interface AppActions {
   loadSession: (id: string) => void;
   deleteSession: (id: string) => void;
   syncSessionsFromDB: () => Promise<void>;
+  // Memory
+  mergeMemoryFacts: (facts: MemoryFact[]) => void;
+  clearMemory: () => void;
   // Single-model / auto
   addConversationTurn: (userPrompt: string, assistantResponse: string) => void;
   clearConversation: () => void;
@@ -48,6 +58,8 @@ export const useAppStore = create<AppStore>()(
   chatTurns: [],
   history: [],
   sessions: [],
+  activeSessionId: null,
+  userMemory: [],
   conversation: [],
   providerConversations: {},
   debateConversation: [],
@@ -66,7 +78,7 @@ export const useAppStore = create<AppStore>()(
     set((state) => ({
       chatTurns: state.chatTurns.map((t) => (t.id === id ? { ...t, ...patch } : t)),
     })),
-  clearTurns: () => set({ chatTurns: [] }),
+  clearTurns: () => set({ chatTurns: [], activeSessionId: null }),
 
   addHistoryEntry: (entry) =>
     set((state) => ({
@@ -77,8 +89,10 @@ export const useAppStore = create<AppStore>()(
   saveSession: () =>
     set((state) => {
       if (state.chatTurns.length === 0) return {};
+      // Reuse stable ID so repeated saves update rather than duplicate
+      const id = state.activeSessionId ?? generateId();
       const session: ChatSession = {
-        id: generateId(),
+        id,
         title: state.chatTurns[0].prompt,
         timestamp: state.chatTurns[0].result?.timestamp ?? new Date(),
         mode: state.chatTurns[0].mode,
@@ -88,12 +102,19 @@ export const useAppStore = create<AppStore>()(
         debateConversation: state.debateConversation,
       };
       // Sync to Supabase in background (don't block UI)
-      fetch('/api/sessions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(session),
-      }).catch(() => {});
-      return { sessions: [session, ...state.sessions].slice(0, 50) };
+      getAuthHeader().then((authHeader) => {
+        fetch('/api/sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeader },
+          body: JSON.stringify(session),
+        }).catch(() => {});
+      });
+      // Upsert into sessions list
+      const exists = state.sessions.some((s) => s.id === id);
+      const sessions = exists
+        ? state.sessions.map((s) => (s.id === id ? session : s))
+        : [session, ...state.sessions].slice(0, 50);
+      return { sessions, activeSessionId: id };
     }),
   loadSession: (id) =>
     set((state) => {
@@ -107,20 +128,19 @@ export const useAppStore = create<AppStore>()(
       };
     }),
   deleteSession: (id) => {
-    fetch(`/api/sessions?id=${id}`, { method: 'DELETE' }).catch(() => {});
+    getAuthHeader().then((authHeader) => {
+      fetch(`/api/sessions?id=${id}`, { method: 'DELETE', headers: authHeader }).catch(() => {});
+    });
     return set((state) => ({ sessions: state.sessions.filter((s) => s.id !== id) }));
   },
   syncSessionsFromDB: async () => {
     try {
-      const res = await fetch('/api/sessions');
+      const authHeader = await getAuthHeader();
+      const res = await fetch('/api/sessions', { headers: authHeader });
       if (!res.ok) return;
       const sessions: ChatSession[] = await res.json();
-      // Merge DB sessions with localStorage, DB takes priority
-      set((state) => {
-        const localIds = new Set(sessions.map((s) => s.id));
-        const localOnly = state.sessions.filter((s) => !localIds.has(s.id));
-        return { sessions: [...sessions, ...localOnly].slice(0, 50) };
-      });
+      // DB sessions replace localStorage — user's canonical source of truth
+      set(() => ({ sessions: sessions.slice(0, 50) }));
     } catch {
       // Network failure — fall back to localStorage silently
     }
@@ -162,6 +182,19 @@ export const useAppStore = create<AppStore>()(
     })),
   clearDebateConversation: () => set({ debateConversation: [] }),
 
+  mergeMemoryFacts: (incoming) =>
+    set((state) => {
+      const existing = new Map(state.userMemory.map((f) => [f.fact.toLowerCase(), f]));
+      for (const f of incoming) {
+        existing.set(f.fact.toLowerCase(), f); // newer fact wins on duplicate
+      }
+      const merged = Array.from(existing.values())
+        .sort((a, b) => b.addedAt.localeCompare(a.addedAt))
+        .slice(0, 25); // cap at 25 facts
+      return { userMemory: merged };
+    }),
+  clearMemory: () => set({ userMemory: [] }),
+
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   toggleSettings: () => set((state) => ({ settingsOpen: !state.settingsOpen })),
   setMockMode: (mock) => set({ mockMode: mock }),
@@ -172,7 +205,9 @@ export const useAppStore = create<AppStore>()(
       // Only persist sessions and history — skip transient UI state
       partialize: (state) => ({
         sessions: state.sessions,
+        activeSessionId: state.activeSessionId,
         history: state.history,
+        userMemory: state.userMemory,
       }),
     },
   ),

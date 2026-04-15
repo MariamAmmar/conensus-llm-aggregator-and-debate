@@ -41,8 +41,8 @@ export function OutputPanel({ result }: OutputPanelProps) {
         </div>
       )}
 
-      {/* Image mode */}
-      {result.mode === 'image' && result.imageResult && (
+      {/* Image output — shown for dedicated image mode or auto-routed image requests */}
+      {result.imageResult && (
         <ImageOutput imageResult={result.imageResult} prompt={result.prompt} />
       )}
 
@@ -70,8 +70,8 @@ export function OutputPanel({ result }: OutputPanelProps) {
         </>
       )}
 
-      {/* Single model / auto mode */}
-      {result.mode !== 'image' && result.mode !== 'debate' && result.mode !== 'all' && (
+      {/* Single model / auto mode — skip if image was returned */}
+      {!result.imageResult && result.mode !== 'debate' && result.mode !== 'all' && (
         <>
           {/* Router decision (auto mode only) */}
           {result.mode === 'auto' && result.routerDecision && (

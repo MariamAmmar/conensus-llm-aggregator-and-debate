@@ -13,6 +13,10 @@ const PROVIDER_ACCENT: Record<ProviderId, string> = {
   anthropic: 'border-l-orange-500',
   gemini: 'border-l-blue-500',
   perplexity: 'border-l-cyan-500',
+  grok: 'border-l-rose-500',
+  llama: 'border-l-lime-500',
+  o4mini: 'border-l-sky-500',
+  deepseek: 'border-l-violet-500',
   'openai-image': 'border-l-amber-500',
   'gemini-image': 'border-l-blue-500',
 };
@@ -22,6 +26,10 @@ const PROVIDER_ICON_COLOR: Record<ProviderId, string> = {
   anthropic: 'text-orange-400',
   gemini: 'text-blue-400',
   perplexity: 'text-cyan-400',
+  grok: 'text-rose-400',
+  llama: 'text-lime-400',
+  o4mini: 'text-sky-400',
+  deepseek: 'text-violet-400',
   'openai-image': 'text-amber-400',
   'gemini-image': 'text-blue-400',
 };
@@ -31,6 +39,10 @@ const PROVIDER_BADGE_VARIANT: Record<ProviderId, string> = {
   anthropic: 'orange',
   gemini: 'info',
   perplexity: 'cyan',
+  grok: 'destructive',
+  llama: 'success',
+  o4mini: 'info',
+  deepseek: 'cyan',
   'openai-image': 'warning',
   'gemini-image': 'info',
 };

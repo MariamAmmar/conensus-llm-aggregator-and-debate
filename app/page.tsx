@@ -1,7 +1,8 @@
 'use client';
 
-import { useRef, useEffect } from 'react';
+import { useRef, useEffect, useState } from 'react';
 import { useAppStore } from '@/lib/store';
+import { useAuth } from '@/lib/auth';
 import { getMockResult } from '@/lib/mock-data';
 import { Header } from '@/components/layout/Header';
 import { Sidebar } from '@/components/layout/Sidebar';
@@ -11,6 +12,19 @@ import { OutputPanel } from '@/components/output/OutputPanel';
 import { Sparkles, AlertCircle } from 'lucide-react';
 import type { HistoryEntry, AppResult, ChatTurn, AttachedImage } from '@/types';
 import { generateId } from '@/utils';
+
+const ROTATING_PROMPTS = [
+  'Write a passive-aggressive note from my phone battery to me',
+  'Explain blockchain to a golden retriever',
+  'Write a dramatic movie trailer for doing laundry',
+  'If AI became sentient, what\'s the first thing it would complain about?',
+  'Roast my life choices — I use AI for everything',
+  'Write a breakup letter from my WiFi router to me',
+  'What would a robot therapist say to a stressed-out toaster?',
+  'Explain the meaning of life but make it about pizza',
+  'Write a performance review for the sun',
+  'If Monday had a Yelp review, what would it say?',
+];
 
 export default function Home() {
   const {
@@ -36,15 +50,42 @@ export default function Home() {
     setPrompt,
     saveSession,
     syncSessionsFromDB,
+    userMemory,
+    mergeMemoryFacts,
   } = useAppStore();
 
+  const { user } = useAuth();
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  // Pick a new funny prompt on each page load (after hydration to avoid SSR mismatch)
+  const [rotatingPrompt, setRotatingPrompt] = useState(ROTATING_PROMPTS[0]);
+  useEffect(() => {
+    setRotatingPrompt(ROTATING_PROMPTS[Math.floor(Math.random() * ROTATING_PROMPTS.length)]);
+  }, []);
 
+  // Sync sessions on load and whenever auth state changes (login/logout)
   useEffect(() => {
     syncSessionsFromDB();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [user?.id]);
+
+  // Auto-save current session whenever chatTurns changes (after each completed turn)
+  useEffect(() => {
+    const completedTurns = chatTurns.filter((t) => !t.loading);
+    if (completedTurns.length === 0) return;
+    saveSession();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatTurns]);
+
+  // Save on page close/refresh
+  useEffect(() => {
+    function handleUnload() {
+      if (chatTurns.length > 0) saveSession();
+    }
+    window.addEventListener('beforeunload', handleUnload);
+    return () => window.removeEventListener('beforeunload', handleUnload);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatTurns]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -108,6 +149,7 @@ export default function Home() {
             providerConversations,
             debateConversation,
             images,
+            userMemory: userMemory.map((f) => f.fact),
           }),
         });
         const data = await res.json();
@@ -154,6 +196,22 @@ export default function Home() {
   }
 
   function handleNewConversation() {
+    // Extract memory facts from the current session before clearing (fire and forget)
+    const completedTurns = chatTurns.filter((t) => t.result && !t.error);
+    if (completedTurns.length > 0) {
+      const turns = completedTurns.map((t) => ({
+        prompt: t.prompt,
+        response: t.result?.finalAnswer ?? t.result?.responses[0]?.content ?? '',
+      }));
+      fetch('/api/memory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ turns }),
+      })
+        .then((r) => r.json())
+        .then(({ facts }) => { if (facts?.length) mergeMemoryFacts(facts); })
+        .catch(() => {});
+    }
     saveSession();
     clearTurns();
     setPrompt('');
@@ -188,10 +246,10 @@ export default function Home() {
 
               <div className="flex flex-wrap gap-2 justify-center">
                 {[
-                  'Explain quantum entanglement simply',
-                  'Write a haiku about debugging',
+                  'What can you do?',
+                  'Who is Mariam?',
                   'What are the latest AI developments?',
-                  'Debug this: for i in range(10) print(i)',
+                  rotatingPrompt,
                 ].map((example) => (
                   <button
                     key={example}

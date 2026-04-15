@@ -31,15 +31,16 @@ export function generateId(): string {
  * Format a timestamp for display in the history sidebar.
  * Shows relative time for recent entries, absolute for older ones.
  */
-export function formatTimestamp(date: Date): string {
+export function formatTimestamp(date: Date | string): string {
+  const d = date instanceof Date ? date : new Date(date);
   const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
+  const diffMs = now.getTime() - d.getTime();
   const diffMinutes = diffMs / 1000 / 60;
 
   if (diffMinutes < 1) return 'Just now';
-  if (diffMinutes < 60) return formatDistanceToNow(date, { addSuffix: true });
-  if (diffMinutes < 60 * 24) return format(date, 'h:mm a');
-  return format(date, 'MMM d');
+  if (diffMinutes < 60) return formatDistanceToNow(d, { addSuffix: true });
+  if (diffMinutes < 60 * 24) return format(d, 'h:mm a');
+  return format(d, 'MMM d');
 }
 
 /**
@@ -51,6 +52,10 @@ export function getProviderLabel(id: ProviderId): string {
     anthropic: 'Claude',
     gemini: 'Gemini',
     perplexity: 'Perplexity',
+    grok: 'Grok',
+    llama: 'Llama 4',
+    o4mini: 'o4-mini',
+    deepseek: 'DeepSeek R1',
     'openai-image': 'DALL-E',
     'gemini-image': 'Imagen',
   };

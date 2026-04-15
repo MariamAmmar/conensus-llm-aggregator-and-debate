@@ -3,8 +3,8 @@ import type { TextProvider } from './base';
 import type { ModelResponse, ComputeTier, ConversationMessage, AttachedImage } from '@/types';
 
 const MODELS: Record<ComputeTier, string> = {
-  light:    'gemini-2.5-flash',
-  standard: 'gemini-2.5-pro',
+  light:    'gemini-2.0-flash',
+  standard: 'gemini-2.5-flash',
   heavy:    'gemini-2.5-pro',
 };
 

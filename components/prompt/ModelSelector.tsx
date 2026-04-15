@@ -11,13 +11,17 @@ import {
   LayoutGrid,
   ChevronDown,
   Wand2,
+  Flame,
+  Box,
+  Cpu,
+  GitBranch,
 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 import { MODEL_CONFIGS } from '@/config/models';
 import { cn } from '@/lib/utils';
 import type { ModelMode, ImageProviderMode } from '@/types';
 
-const SPECIFIC_MODELS: ModelMode[] = ['chatgpt', 'claude', 'gemini', 'perplexity', 'all', 'image'];
+const SPECIFIC_MODELS: ModelMode[] = ['chatgpt', 'claude', 'gemini', 'perplexity', 'grok', 'llama', 'o4mini', 'deepseek', 'all', 'image'];
 
 const ICONS: Record<ModelMode, React.ReactNode> = {
   auto:       <Sparkles className="w-3.5 h-3.5" />,
@@ -25,6 +29,10 @@ const ICONS: Record<ModelMode, React.ReactNode> = {
   claude:     <Brain className="w-3.5 h-3.5" />,
   gemini:     <Zap className="w-3.5 h-3.5" />,
   perplexity: <Globe className="w-3.5 h-3.5" />,
+  grok:       <Flame className="w-3.5 h-3.5" />,
+  llama:      <Box className="w-3.5 h-3.5" />,
+  o4mini:     <Cpu className="w-3.5 h-3.5" />,
+  deepseek:   <GitBranch className="w-3.5 h-3.5" />,
   all:        <LayoutGrid className="w-3.5 h-3.5" />,
   debate:     <Users className="w-3.5 h-3.5" />,
   image:      <ImageIcon className="w-3.5 h-3.5" />,

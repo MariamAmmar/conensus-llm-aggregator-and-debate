@@ -4,6 +4,10 @@ import { openaiProvider } from './openai';
 import { anthropicProvider } from './anthropic';
 import { geminiProvider } from './gemini';
 import { perplexityProvider } from './perplexity';
+import { grokProvider } from './grok';
+import { llamaProvider } from './llama';
+import { o4miniProvider } from './o4mini';
+import { deepseekProvider } from './deepseek';
 import { openaiImageProvider } from './openai-image';
 import { geminiImageProvider } from './gemini-image';
 
@@ -13,6 +17,10 @@ export const TEXT_PROVIDERS: Partial<Record<ProviderId, TextProvider>> = {
   anthropic: anthropicProvider,
   gemini: geminiProvider,
   perplexity: perplexityProvider,
+  grok: grokProvider,
+  llama: llamaProvider,
+  o4mini: o4miniProvider,
+  deepseek: deepseekProvider,
 };
 
 // Registry of all image providers
