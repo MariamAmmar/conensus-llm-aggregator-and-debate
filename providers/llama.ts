@@ -3,9 +3,10 @@ import type { TextProvider } from './base';
 import type { ModelResponse, ComputeTier, ConversationMessage, AttachedImage } from '@/types';
 
 // Llama 4 via Groq's OpenAI-compatible API
+// Scout (16E) is on the free tier; Maverick (128E) requires a paid Groq plan
 const MODELS: Record<ComputeTier, string> = {
   light:    'meta-llama/llama-4-scout-17b-16e-instruct',
-  standard: 'meta-llama/llama-4-maverick-17b-128e-instruct',
+  standard: 'meta-llama/llama-4-scout-17b-16e-instruct',
   heavy:    'meta-llama/llama-4-maverick-17b-128e-instruct',
 };
 
