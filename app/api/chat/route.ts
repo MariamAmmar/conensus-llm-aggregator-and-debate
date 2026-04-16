@@ -7,7 +7,12 @@ import { generateId } from '@/utils';
 import { supabase, createAdminClient } from '@/lib/supabase';
 import { OWNER_EMAIL } from '@/lib/stripe';
 
-const FREE_QUERY_LIMIT = 5;
+const FREE_TOKEN_LIMIT = 100;
+
+// ~4 characters per token is a good approximation for English text
+function estimateTokens(text: string): number {
+  return Math.ceil(text.length / 4);
+}
 
 function getIP(request: NextRequest): string {
   return (
@@ -34,6 +39,7 @@ export async function POST(request: NextRequest) {
 
   // Owner gets unlimited free access
   const isOwner = userEmail === OWNER_EMAIL;
+  let anonIP: string | null = null; // set when anonymous user passes the limit check
 
   if (!isOwner) {
     const admin = createAdminClient();
@@ -54,27 +60,24 @@ export async function POST(request: NextRequest) {
         );
       }
     } else {
-      // Anonymous user: IP-based query limit
+      // Anonymous user: IP-based token limit
       const ip = getIP(request);
       const { data: usage } = await admin
         .from('ip_usage')
-        .select('query_count')
+        .select('token_count')
         .eq('ip', ip)
         .single();
 
-      const queryCount = (usage?.query_count as number | null) ?? 0;
-      if (queryCount >= FREE_QUERY_LIMIT) {
+      const tokenCount = (usage?.token_count as number | null) ?? 0;
+      if (tokenCount >= FREE_TOKEN_LIMIT) {
         return NextResponse.json(
-          { error: 'Free limit reached', code: 'LIMIT_REACHED', queriesUsed: queryCount },
+          { error: 'Free limit reached', code: 'LIMIT_REACHED', tokensUsed: tokenCount },
           { status: 429 },
         );
       }
 
-      // Increment count (upsert so first visit creates the row)
-      await admin.from('ip_usage').upsert(
-        { ip, query_count: queryCount + 1, updated_at: new Date().toISOString() },
-        { onConflict: 'ip' },
-      );
+      // Store IP so we can increment after body is parsed below
+      anonIP = ip;
     }
   }
   // ── End access control ─────────────────────────────────────────────────────
@@ -92,6 +95,22 @@ export async function POST(request: NextRequest) {
       documents: AttachedDocument[];
       userMemory: string[];
     };
+
+    // Increment token count for anonymous users now that we have the prompt
+    if (anonIP) {
+      const admin = createAdminClient();
+      const tokens = estimateTokens(prompt);
+      const { data: current } = await admin
+        .from('ip_usage')
+        .select('token_count')
+        .eq('ip', anonIP)
+        .single();
+      const existing = (current?.token_count as number | null) ?? 0;
+      await admin.from('ip_usage').upsert(
+        { ip: anonIP, token_count: existing + tokens, updated_at: new Date().toISOString() },
+        { onConflict: 'ip' },
+      );
+    }
 
     // Inject text document contents into the prompt so all providers benefit
     const textDocContext = documents

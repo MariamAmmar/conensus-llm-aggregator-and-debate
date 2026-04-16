@@ -59,7 +59,7 @@ export function TrialModal({ accessToken, onClose }: TrialModalProps) {
           <div className="flex items-baseline justify-between">
             <span className="text-zinc-300 text-sm font-medium">Pro Plan</span>
             <div className="text-right">
-              <span className="text-2xl font-bold text-zinc-100">$13</span>
+              <span className="text-2xl font-bold text-zinc-100">$12</span>
               <span className="text-zinc-500 text-xs">/month</span>
             </div>
           </div>
@@ -82,7 +82,7 @@ export function TrialModal({ accessToken, onClose }: TrialModalProps) {
 
         <p className="text-[11px] text-zinc-600 text-center">
           You'll receive a reminder email before your trial ends on day 7.
-          After that, $13/month. Cancel anytime from your account.
+          After that, $12/month. Cancel anytime from your account.
         </p>
 
         {error && <p className="text-xs text-red-400 text-center">{error}</p>}
