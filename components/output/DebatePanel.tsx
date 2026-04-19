@@ -104,7 +104,7 @@ export function DebatePanel({ debateResult }: DebatePanelProps) {
           {/* Toggle to see model comparison */}
           <button
             onClick={() => setShowComparison(!showComparison)}
-            className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors pt-1 border-t border-zinc-800 w-full"
+            className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 transition-colors pt-3 border-t border-zinc-800 w-full font-medium"
           >
             {showComparison ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
             {showComparison ? 'Hide model comparison' : 'See how models compared'}
