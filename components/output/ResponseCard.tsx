@@ -47,15 +47,23 @@ const PROVIDER_BADGE_VARIANT: Record<ProviderId, string> = {
   'gemini-image': 'info',
 };
 
+const PREVIEW_CHARS = 280;
+
 interface ResponseCardProps {
   response: ModelResponse;
   isLoading?: boolean;
   onVote?: (provider: ProviderId) => Promise<void>;
   voted?: ProviderId | null;
+  collapsible?: boolean;
 }
 
-export function ResponseCard({ response, isLoading, onVote, voted }: ResponseCardProps) {
+export function ResponseCard({ response, isLoading, onVote, voted, collapsible }: ResponseCardProps) {
   const [voting, setVoting] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const isTruncated = collapsible && response.content.length > PREVIEW_CHARS;
+  const displayContent = isTruncated && !expanded
+    ? response.content.slice(0, PREVIEW_CHARS).trimEnd() + '…'
+    : response.content;
 
   async function handleVote() {
     if (!onVote || voting || voted) return;
@@ -135,8 +143,16 @@ export function ResponseCard({ response, isLoading, onVote, voted }: ResponseCar
       <CardContent className="pt-0 space-y-3">
         <div
           className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap response-content"
-          dangerouslySetInnerHTML={{ __html: formatResponseContent(response.content) }}
+          dangerouslySetInnerHTML={{ __html: formatResponseContent(displayContent) }}
         />
+        {isTruncated && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="text-xs text-indigo-400 hover:text-indigo-300 transition-colors font-medium"
+          >
+            {expanded ? 'See less ↑' : 'See more ↓'}
+          </button>
+        )}
         {onVote && (
           <div className="flex justify-end pt-1">
             <button
