@@ -30,10 +30,21 @@
 @layer base {
   * {
     @apply border-border;
+    -webkit-tap-highlight-color: transparent;
   }
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+    /* Smooth scrolling on iOS */
+    -webkit-overflow-scrolling: touch;
+    /* Prevent font size inflation on rotation */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+  /* Use dynamic viewport height to avoid iOS Safari toolbar overlap */
+  .h-screen-safe {
+    height: 100vh;
+    height: 100dvh;
   }
 }
 

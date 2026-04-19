@@ -254,7 +254,7 @@ export default function Home() {
   }
 
   return (
-    <div className="flex h-screen overflow-hidden bg-zinc-950">
+    <div className="flex h-screen-safe overflow-hidden bg-zinc-950">
       {showLoginGate && (
         <LoginModal onClose={() => setShowLoginGate(false)} />
       )}
@@ -373,7 +373,7 @@ export default function Home() {
               </div>
             </main>
 
-            <div className="bg-zinc-950 pb-6 pt-3 border-t border-zinc-800/60">
+            <div className="bg-zinc-950 pb-6 pt-3 border-t border-zinc-800/60" style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
               <div className="max-w-3xl mx-auto px-4 space-y-3">
                 <ModelSelector />
                 <PromptInput onSubmit={handleSubmit} onStop={handleStop} />
