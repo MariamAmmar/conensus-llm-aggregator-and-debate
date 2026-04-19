@@ -7,7 +7,7 @@ import { generateId } from '@/utils';
 import { supabase, createAdminClient } from '@/lib/supabase';
 import { OWNER_EMAIL } from '@/lib/stripe';
 
-const FREE_TOKEN_LIMIT = 100;
+const FREE_TOKEN_LIMIT = 400;
 
 // ~4 characters per token is a good approximation for English text
 function estimateTokens(text: string): number {
