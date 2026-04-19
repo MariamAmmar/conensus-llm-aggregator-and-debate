@@ -53,7 +53,7 @@ export function DebatePanel({ debateResult }: DebatePanelProps) {
 
       {/* Model responses grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-        {responses.map((response) => (
+        {responses.filter((r) => !r.error && r.content.trim()).map((response) => (
           <ResponseCard key={response.provider} response={response} collapsible />
         ))}
       </div>

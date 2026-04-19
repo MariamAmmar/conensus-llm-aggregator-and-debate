@@ -58,7 +58,7 @@ export function OutputPanel({ result }: OutputPanelProps) {
             <p className="text-xs text-zinc-500 pl-1">Vote for the best answer to help improve routing.</p>
           )}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            {result.responses.map((response) => (
+            {result.responses.filter((r) => !r.error && r.content.trim()).map((response) => (
               <ResponseCard
                 key={response.provider}
                 response={response}
@@ -81,7 +81,7 @@ export function OutputPanel({ result }: OutputPanelProps) {
 
           {/* Responses */}
           <div className="space-y-3">
-            {result.responses.map((response) => (
+            {result.responses.filter((r) => !r.error && r.content.trim()).map((response) => (
               <ResponseCard key={response.provider} response={response} />
             ))}
           </div>
