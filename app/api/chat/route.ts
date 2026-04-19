@@ -7,7 +7,7 @@ import { generateId } from '@/utils';
 import { supabase, createAdminClient } from '@/lib/supabase';
 import { OWNER_EMAIL } from '@/lib/stripe';
 
-const FREE_TOKEN_LIMIT = 1500;
+const FREE_TOKEN_LIMIT = 15000;
 
 // ~4 characters per token is a good approximation for English text
 function estimateTokens(text: string): number {
@@ -216,9 +216,8 @@ Be concise. Give the most useful answer in as few words as needed — no padding
           const typedPid = pid as ProviderId;
           const provider = TEXT_PROVIDERS[typedPid];
           if (!provider) return null;
-          const providerHistory = (providerConversations as Record<string, ConversationMessage[]>)[pid] ?? [];
           const docs = pid === 'anthropic' ? pdfDocs : [];
-          return provider.complete(augmentedPrompt, systemPrefix, 512, 'standard', providerHistory, images, docs);
+          return provider.complete(augmentedPrompt, systemPrefix, 512, 'standard', history, images, docs);
         }),
       );
 
@@ -244,9 +243,8 @@ Be concise. Give the most useful answer in as few words as needed — no padding
         allProviders.map(async (pid) => {
           const provider = TEXT_PROVIDERS[pid];
           if (!provider) return null;
-          const providerHistory = providerConversations[pid] ?? [];
           const docs = pid === 'anthropic' ? pdfDocs : [];
-          return provider.complete(augmentedPrompt, systemPrefix, 512, 'standard', providerHistory, images, docs);
+          return provider.complete(augmentedPrompt, systemPrefix, 512, 'standard', history, images, docs);
         }),
       );
 
@@ -270,7 +268,7 @@ Be concise. Give the most useful answer in as few words as needed — no padding
     // ── Debate mode ──────────────────────────────────────────────────────────
     if (mode === 'debate') {
       // All models share the debate conversation (synthesized answer as context)
-      const debateResult = await runDebate(augmentedPrompt, debateConversation, systemPrefix);
+      const debateResult = await runDebate(augmentedPrompt, history, systemPrefix);
 
       const result: AppResult = {
         id,
