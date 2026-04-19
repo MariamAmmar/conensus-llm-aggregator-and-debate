@@ -5,6 +5,8 @@ import { X, CreditCard, CheckCircle, Clock, XCircle, Loader2, ExternalLink } fro
 import { Button } from '@/components/ui/button';
 import type { User } from '@supabase/supabase-js';
 
+const OWNER_EMAIL = 'ammarproductions@gmail.com';
+
 interface Subscription {
   status: string;
   trial_end: string | null;
@@ -87,6 +89,7 @@ export function AccountModal({ user, accessToken, onClose }: AccountModalProps) 
   }
 
   const displayName = (user.user_metadata?.full_name as string | undefined) ?? user.email ?? 'Account';
+  const isOwner = user.email === OWNER_EMAIL;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -104,57 +107,73 @@ export function AccountModal({ user, accessToken, onClose }: AccountModalProps) 
           <p className="text-xs text-zinc-500">{user.email}</p>
         </div>
 
-        {/* Subscription card */}
-        <div className="rounded-xl border border-zinc-800 bg-zinc-800/40 p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-400">Plan</span>
-            <span className="text-xs font-semibold text-zinc-200">Consensus AI Pro · $12/mo</span>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-zinc-400">Status</span>
-            {loadingSub ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-500" />
-            ) : sub ? (
-              <StatusBadge status={sub.status} />
-            ) : (
-              <span className="text-xs text-zinc-500">No active subscription</span>
-            )}
-          </div>
-
-          {sub?.status === 'trialing' && sub.trial_end && (
+        {isOwner ? (
+          <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/5 p-4 space-y-1">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-zinc-400">Trial ends</span>
-              <span className="text-xs text-zinc-300">{fmt(sub.trial_end)}</span>
+              <span className="text-xs font-medium text-zinc-400">Plan</span>
+              <span className="text-xs font-semibold text-indigo-300">Owner · Unlimited</span>
             </div>
-          )}
-
-          {sub?.status === 'active' && sub.current_period_end && (
             <div className="flex items-center justify-between">
-              <span className="text-xs font-medium text-zinc-400">Next billing</span>
-              <span className="text-xs text-zinc-300">{fmt(sub.current_period_end)}</span>
+              <span className="text-xs font-medium text-zinc-400">Status</span>
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-400">
+                <CheckCircle className="w-3.5 h-3.5" /> Active
+              </span>
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <>
+            <div className="rounded-xl border border-zinc-800 bg-zinc-800/40 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-zinc-400">Plan</span>
+                <span className="text-xs font-semibold text-zinc-200">Consensus AI Pro · $12/mo</span>
+              </div>
 
-        {portalError && <p className="text-xs text-red-400 text-center">{portalError}</p>}
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-zinc-400">Status</span>
+                {loadingSub ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin text-zinc-500" />
+                ) : sub ? (
+                  <StatusBadge status={sub.status} />
+                ) : (
+                  <span className="text-xs text-zinc-500">No active subscription</span>
+                )}
+              </div>
 
-        <Button
-          onClick={handleManageBilling}
-          disabled={portalLoading}
-          variant="outline"
-          className="w-full h-9 text-xs border-zinc-700 text-zinc-300 hover:bg-zinc-800 gap-2"
-        >
-          {portalLoading ? (
-            <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Opening billing portal...</>
-          ) : (
-            <><CreditCard className="w-3.5 h-3.5" /> Manage billing & cancel<ExternalLink className="w-3 h-3 ml-auto" /></>
-          )}
-        </Button>
+              {sub?.status === 'trialing' && sub.trial_end && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-zinc-400">Trial ends</span>
+                  <span className="text-xs text-zinc-300">{fmt(sub.trial_end)}</span>
+                </div>
+              )}
 
-        <p className="text-[11px] text-zinc-600 text-center">
-          Billing is managed securely via Stripe. You can update your payment method, view invoices, or cancel anytime.
-        </p>
+              {sub?.status === 'active' && sub.current_period_end && (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-medium text-zinc-400">Next billing</span>
+                  <span className="text-xs text-zinc-300">{fmt(sub.current_period_end)}</span>
+                </div>
+              )}
+            </div>
+
+            {portalError && <p className="text-xs text-red-400 text-center">{portalError}</p>}
+
+            <Button
+              onClick={handleManageBilling}
+              disabled={portalLoading}
+              variant="outline"
+              className="w-full h-9 text-xs border-zinc-700 text-zinc-300 hover:bg-zinc-800 gap-2"
+            >
+              {portalLoading ? (
+                <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Opening billing portal...</>
+              ) : (
+                <><CreditCard className="w-3.5 h-3.5" /> Manage billing & cancel<ExternalLink className="w-3 h-3 ml-auto" /></>
+              )}
+            </Button>
+
+            <p className="text-[11px] text-zinc-600 text-center">
+              Billing is managed securely via Stripe. You can update your payment method, view invoices, or cancel anytime.
+            </p>
+          </>
+        )}
       </div>
     </div>
   );
