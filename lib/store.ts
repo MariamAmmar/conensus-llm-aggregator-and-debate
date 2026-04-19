@@ -12,6 +12,7 @@ async function getAuthHeader(): Promise<Record<string, string>> {
 
 interface AppActions {
   setMode: (mode: ModelMode) => void;
+  toggleModel: (mode: ModelMode) => void;
   setImageProvider: (provider: ImageProviderMode) => void;
   setPrompt: (prompt: string) => void;
   setLoading: (loading: boolean) => void;
@@ -52,6 +53,7 @@ export const useAppStore = create<AppStore>()(
     (set) => ({
   // Initial state
   selectedMode: 'auto',
+  selectedModels: ['chatgpt'] as ModelMode[],
   selectedImageProvider: 'auto-image',
   prompt: '',
   isLoading: false,
@@ -68,7 +70,16 @@ export const useAppStore = create<AppStore>()(
   mockMode: isMockMode,
 
   // Actions
-  setMode: (mode) => set({ selectedMode: mode }),
+  setMode: (mode) => set({ selectedMode: mode, selectedModels: [mode] }),
+  toggleModel: (mode) => set((state) => {
+    const current = state.selectedModels;
+    if (current.includes(mode)) {
+      if (current.length === 1) return {}; // keep at least one selected
+      const next = current.filter((m) => m !== mode);
+      return { selectedModels: next, selectedMode: next[0] };
+    }
+    return { selectedModels: [...current, mode], selectedMode: mode };
+  }),
   setImageProvider: (provider) => set({ selectedImageProvider: provider }),
   setPrompt: (prompt) => set({ prompt }),
   setLoading: (loading) => set({ isLoading: loading }),

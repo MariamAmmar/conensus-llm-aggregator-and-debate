@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { ModelMode, ImageProviderMode, AppResult, ModelResponse, ComputeTier, ConversationMessage, ProviderConversations, AttachedImage, AttachedDocument } from '@/types';
+import type { ModelMode, ImageProviderMode, AppResult, ModelResponse, ComputeTier, ConversationMessage, ProviderConversations, AttachedImage, AttachedDocument, ProviderId } from '@/types';
 import { route } from '@/router';
 import { TEXT_PROVIDERS, IMAGE_PROVIDERS, resolveImageProvider } from '@/providers';
 import { runDebate } from '@/debate';
@@ -84,7 +84,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { prompt, mode, imageProvider = 'auto-image', history = [], providerConversations = {}, debateConversation = [], images = [], documents = [], userMemory = [] } = body as {
+    const { prompt, mode, imageProvider = 'auto-image', history = [], providerConversations = {}, debateConversation = [], images = [], documents = [], userMemory = [], selectedModels = [] } = body as {
       prompt: string;
       mode: ModelMode;
       imageProvider: ImageProviderMode;
@@ -94,6 +94,14 @@ export async function POST(request: NextRequest) {
       images: AttachedImage[];
       documents: AttachedDocument[];
       userMemory: string[];
+      selectedModels: ModelMode[];
+    };
+
+    // Map from ModelMode → provider ID
+    const MODE_TO_PROVIDER: Partial<Record<ModelMode, string>> = {
+      chatgpt: 'openai', claude: 'anthropic', gemini: 'gemini',
+      perplexity: 'perplexity', grok: 'grok', llama: 'llama',
+      o4mini: 'o4mini', deepseek: 'deepseek',
     };
 
     // Increment token count for anonymous users now that we have the prompt
@@ -195,6 +203,35 @@ Answer naturally and conversationally — do not recite this as a list unless th
         };
         return NextResponse.json(result);
       }
+    }
+
+    // ── Multi-select mode (2+ specific models chosen in Select panel) ────────
+    if (selectedModels.length > 1 && selectedModels.every((m) => m in MODE_TO_PROVIDER)) {
+      const providerIds = selectedModels.map((m) => MODE_TO_PROVIDER[m]).filter(Boolean) as string[];
+
+      const responses = await Promise.all(
+        providerIds.map(async (pid) => {
+          const typedPid = pid as ProviderId;
+          const provider = TEXT_PROVIDERS[typedPid];
+          if (!provider) return null;
+          const providerHistory = (providerConversations as Record<string, ConversationMessage[]>)[pid] ?? [];
+          const docs = pid === 'anthropic' ? pdfDocs : [];
+          return provider.complete(augmentedPrompt, systemPrefix, 1024, 'standard', providerHistory, images, docs);
+        }),
+      );
+
+      const validResponses = responses.filter(Boolean) as ModelResponse[];
+      const result: AppResult = {
+        id, prompt, mode: 'all',
+        routerDecision: null,
+        responses: validResponses,
+        debateResult: null,
+        finalAnswer: '',
+        imageResult: null,
+        timestamp: new Date(),
+        durationMs: Date.now() - start,
+      };
+      return NextResponse.json(result);
     }
 
     // ── All models mode ──────────────────────────────────────────────────────

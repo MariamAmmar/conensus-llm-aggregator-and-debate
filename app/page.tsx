@@ -31,6 +31,7 @@ const ROTATING_PROMPTS = [
 export default function Home() {
   const {
     selectedMode,
+    selectedModels,
     selectedImageProvider,
     isLoading,
     chatTurns,
@@ -170,6 +171,7 @@ export default function Home() {
             images,
             documents,
             userMemory: userMemory.map((f) => f.fact),
+            selectedModels,
           }),
         });
         const data = await res.json();

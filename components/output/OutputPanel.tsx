@@ -64,6 +64,7 @@ export function OutputPanel({ result }: OutputPanelProps) {
                 response={response}
                 onVote={handleVote}
                 voted={votedProvider}
+                collapsible
               />
             ))}
           </div>

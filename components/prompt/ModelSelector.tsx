@@ -15,13 +15,17 @@ import {
   Box,
   Cpu,
   GitBranch,
+  Check,
 } from 'lucide-react';
 import { useAppStore } from '@/lib/store';
 import { MODEL_CONFIGS } from '@/config/models';
 import { cn } from '@/lib/utils';
 import type { ModelMode, ImageProviderMode } from '@/types';
 
-const SPECIFIC_MODELS: ModelMode[] = ['chatgpt', 'claude', 'gemini', 'perplexity', 'grok', 'llama', 'o4mini', 'deepseek', 'all', 'image'];
+// Models available for individual/multi selection
+const SELECTABLE_MODELS: ModelMode[] = ['chatgpt', 'claude', 'gemini', 'perplexity', 'grok', 'llama', 'o4mini', 'deepseek'];
+// Special modes shown separately
+const SPECIAL_MODELS: ModelMode[] = ['all', 'image'];
 
 const ICONS: Record<ModelMode, React.ReactNode> = {
   auto:       <Sparkles className="w-3.5 h-3.5" />,
@@ -74,9 +78,10 @@ function getTopLevel(mode: ModelMode): TopLevel {
 }
 
 export function ModelSelector() {
-  const { selectedMode, selectedImageProvider, setMode, setImageProvider } = useAppStore();
+  const { selectedMode, selectedModels, selectedImageProvider, setMode, toggleModel, setImageProvider } = useAppStore();
   const activeConfig = MODEL_CONFIGS[selectedMode];
   const topLevel = getTopLevel(selectedMode);
+  const multiActive = topLevel === 'select' && selectedModels.length > 1;
 
   function handleTopLevel(choice: TopLevel) {
     if (choice === 'auto') setMode('auto');
@@ -139,29 +144,60 @@ export function ModelSelector() {
         })}
       </div>
 
-      {/* Text model sub-selector */}
+      {/* Model sub-selector — multi-select for text models */}
       {topLevel === 'select' && (
-        <div className="flex flex-wrap gap-1.5 pl-1">
-          {SPECIFIC_MODELS.map((mode) => {
-            const config = MODEL_CONFIGS[mode];
-            const isActive = selectedMode === mode;
-            return (
-              <button
-                key={mode}
-                onClick={() => setMode(mode)}
-                className={cn(
-                  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-150',
-                  isActive
-                    ? config.activeColor
-                    : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 hover:bg-zinc-800',
-                )}
-                aria-pressed={isActive}
-              >
-                {ICONS[mode]}
-                {config.label}
-              </button>
-            );
-          })}
+        <div className="space-y-1.5">
+          <div className="flex flex-wrap gap-1.5 pl-1">
+            {SELECTABLE_MODELS.map((mode) => {
+              const config = MODEL_CONFIGS[mode];
+              const isActive = selectedModels.includes(mode);
+              return (
+                <button
+                  key={mode}
+                  onClick={() => toggleModel(mode)}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-150',
+                    isActive
+                      ? config.activeColor
+                      : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 hover:bg-zinc-800',
+                  )}
+                  aria-pressed={isActive}
+                >
+                  {isActive && <Check className="w-3 h-3" />}
+                  {!isActive && ICONS[mode]}
+                  {config.label}
+                </button>
+              );
+            })}
+          </div>
+          {/* Special modes */}
+          <div className="flex flex-wrap gap-1.5 pl-1">
+            {SPECIAL_MODELS.map((mode) => {
+              const config = MODEL_CONFIGS[mode];
+              const isActive = selectedMode === mode && selectedModels.length === 1;
+              return (
+                <button
+                  key={mode}
+                  onClick={() => setMode(mode)}
+                  className={cn(
+                    'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-150',
+                    isActive
+                      ? config.activeColor
+                      : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 hover:bg-zinc-800',
+                  )}
+                  aria-pressed={isActive}
+                >
+                  {ICONS[mode]}
+                  {config.label}
+                </button>
+              );
+            })}
+          </div>
+          {multiActive && (
+            <p className="text-[11px] text-indigo-400 pl-1">
+              {selectedModels.length} models selected — responses shown side by side
+            </p>
+          )}
         </div>
       )}
 
@@ -191,11 +227,13 @@ export function ModelSelector() {
       )}
 
       {/* Description */}
-      <p className="text-xs text-zinc-500 pl-1">
-        <span className={cn('font-medium', descriptionColor)}>{descriptionLabel}</span>
-        {' — '}
-        {descriptionText}
-      </p>
+      {!multiActive && (
+        <p className="text-xs text-zinc-500 pl-1">
+          <span className={cn('font-medium', descriptionColor)}>{descriptionLabel}</span>
+          {' — '}
+          {descriptionText}
+        </p>
+      )}
     </div>
   );
 }

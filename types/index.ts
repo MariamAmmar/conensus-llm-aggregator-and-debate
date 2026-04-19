@@ -160,6 +160,7 @@ export interface MemoryFact {
 // App state
 export interface AppState {
   selectedMode: ModelMode;
+  selectedModels: ModelMode[]; // active selection in "select" mode (1 = single, 2+ = multi)
   selectedImageProvider: ImageProviderMode;
   prompt: string;
   isLoading: boolean;
