@@ -70,7 +70,9 @@ export default function Home() {
   }, []);
 
   // Sync sessions on load and whenever auth state changes (login/logout)
+  // Also save current in-progress chat so it merges into the account on login
   useEffect(() => {
+    if (user?.id && chatTurns.length > 0) saveSession();
     syncSessionsFromDB();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
@@ -192,14 +194,11 @@ export default function Home() {
         const result: AppResult = { ...data, timestamp: new Date(data.timestamp) };
         updateTurn(turnId, { result, loading: false });
 
+        // All modes share the same conversation context
         if (selectedMode === 'all') {
-          for (const response of result.responses) {
-            if (response.content && !response.error) {
-              addProviderTurn(response.provider, submittedPrompt, response.content);
-            }
-          }
-        } else if (selectedMode === 'debate' && result.finalAnswer) {
-          addDebateTurn(submittedPrompt, result.finalAnswer);
+          // Use the first successful response as the shared context for all-models mode
+          const firstResponse = result.responses.find((r) => r.content && !r.error);
+          if (firstResponse) addConversationTurn(submittedPrompt, firstResponse.content);
         } else if (selectedMode !== 'image' && result.finalAnswer) {
           addConversationTurn(submittedPrompt, result.finalAnswer);
         }

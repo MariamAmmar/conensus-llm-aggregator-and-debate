@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { X, Sparkles, Check, Loader2 } from 'lucide-react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 
 interface TrialModalProps {
@@ -82,7 +83,10 @@ export function TrialModal({ accessToken, onClose }: TrialModalProps) {
 
         <p className="text-[11px] text-zinc-600 text-center">
           You'll receive a reminder email before your trial ends on day 7.
-          After that, $12/month. Cancel anytime from your account.
+          After that, $12/month. Cancel anytime from your account.{' '}
+          <Link href="/privacy" target="_blank" className="text-zinc-500 hover:text-zinc-300 underline underline-offset-2">
+            Privacy Policy
+          </Link>
         </p>
 
         {error && <p className="text-xs text-red-400 text-center">{error}</p>}

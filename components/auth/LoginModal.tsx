@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { X, Mail, Loader2, Sparkles, Github } from 'lucide-react';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { signInWithGoogle, signInWithGitHub, signInWithEmail } from '@/lib/auth';
 
@@ -151,7 +152,10 @@ export function LoginModal({ onClose }: LoginModalProps) {
             )}
 
             <p className="text-[11px] text-zinc-600 text-center">
-              By signing in you agree to our terms. Your data is never shared with third parties.
+              By signing in you agree to our{' '}
+              <Link href="/privacy" target="_blank" className="text-zinc-500 hover:text-zinc-300 underline underline-offset-2">
+                Privacy Policy
+              </Link>. Your data is never shared with third parties.
             </p>
           </>
         )}
