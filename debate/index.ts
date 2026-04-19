@@ -266,12 +266,14 @@ Instructions:
     'You are synthesizing the best answer from multiple AI responses. Be direct and comprehensive.',
   ].filter(Boolean).join('\n\n');
 
+  // History context is already embedded as text in synthesisPrompt above —
+  // passing it again as conversation history doubles the context and causes
+  // providers to silently fail on subsequent debate turns.
   const result = await provider.complete(
     synthesisPrompt,
     systemPrompt,
     DEBATE_CONFIG.maxSynthesisTokens,
     'standard',
-    history,
   );
 
   const winnerScore = scores.find((s) => s.provider === winner);
