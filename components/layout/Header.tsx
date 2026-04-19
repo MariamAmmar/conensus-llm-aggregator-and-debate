@@ -1,19 +1,21 @@
 'use client';
 
 import { useState } from 'react';
-import { Sparkles, PanelLeft, LogOut, User } from 'lucide-react';
+import { Sparkles, PanelLeft, LogOut, User, CreditCard } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAppStore } from '@/lib/store';
 import { useAuth, signOut } from '@/lib/auth';
 import { LoginModal } from '@/components/auth/LoginModal';
 import { AvatarUpload } from '@/components/auth/AvatarUpload';
+import { AccountModal } from '@/components/auth/AccountModal';
 
 export function Header() {
   const { mockMode, toggleSidebar } = useAppStore();
-  const { user, loading } = useAuth();
+  const { user, session, loading } = useAuth();
   const [showLogin, setShowLogin] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showAccount, setShowAccount] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState<string | undefined>(
     user?.user_metadata?.avatar_url as string | undefined
   );
@@ -112,6 +114,14 @@ export function Header() {
                     </div>
                     {/* Change photo */}
                     <AvatarUpload user={user} onUpdated={(url) => setAvatarUrl(url)} />
+                    {/* Manage billing */}
+                    <button
+                      onClick={() => { setShowUserMenu(false); setShowAccount(true); }}
+                      className="w-full flex items-center gap-2 px-3 py-2.5 text-xs text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-colors"
+                    >
+                      <CreditCard className="w-3.5 h-3.5" />
+                      Manage billing
+                    </button>
                     {/* Sign out */}
                     <div className="border-t border-zinc-800">
                       <button
@@ -140,6 +150,13 @@ export function Header() {
       </header>
 
       {showLogin && <LoginModal onClose={() => setShowLogin(false)} />}
+      {showAccount && user && session?.access_token && (
+        <AccountModal
+          user={user}
+          accessToken={session.access_token}
+          onClose={() => setShowAccount(false)}
+        />
+      )}
     </>
   );
 }
