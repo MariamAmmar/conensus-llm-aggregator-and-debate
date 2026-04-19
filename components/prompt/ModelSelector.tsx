@@ -87,7 +87,11 @@ export function ModelSelector() {
     if (choice === 'auto') setMode('auto');
     else if (choice === 'debate') setMode('debate');
     else if (choice === 'select') {
-      if (getTopLevel(selectedMode) !== 'select') setMode('chatgpt');
+      // Always reset to single-model when entering select tab,
+      // so switching from 'all' or 'image' doesn't keep those modes active
+      if (!['chatgpt','claude','gemini','perplexity','grok','llama','o4mini','deepseek'].includes(selectedMode)) {
+        setMode('chatgpt');
+      }
     }
   }
 
