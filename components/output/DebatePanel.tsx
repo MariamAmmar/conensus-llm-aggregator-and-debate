@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { Trophy, Info, X } from 'lucide-react';
+import { Trophy, Info, X, ChevronDown, ChevronUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { ResponseCard } from '@/components/output/ResponseCard';
 import type { DebateResult, ProviderId } from '@/types';
 import { getProviderLabel } from '@/utils';
 import { cn } from '@/lib/utils';
@@ -12,6 +13,15 @@ interface DebatePanelProps {
   debateResult: DebateResult;
   prompt: string;
 }
+
+const SCORE_DIMENSIONS = [
+  { key: 'factualGrounding', label: 'Factual' },
+  { key: 'logicalCoherence', label: 'Logic' },
+  { key: 'completeness', label: 'Complete' },
+  { key: 'clarity', label: 'Clarity' },
+  { key: 'confidenceCalibration', label: 'Confidence' },
+  { key: 'usefulness', label: 'Useful' },
+] as const;
 
 const WINNER_COLORS: Record<ProviderId, string> = {
   openai: 'text-emerald-400',
@@ -28,9 +38,11 @@ const WINNER_COLORS: Record<ProviderId, string> = {
 
 export function DebatePanel({ debateResult }: DebatePanelProps) {
   const [showInfo, setShowInfo] = useState(false);
+  const [showComparison, setShowComparison] = useState(false);
   const { responses, scores, winner, synthesizedAnswer, synthesisReasoning } = debateResult;
 
   const winnerScore = scores.find((s) => s.provider === winner);
+  const validResponses = responses.filter((r) => !r.error && r.content.trim());
 
   return (
     <div className="space-y-4">
@@ -41,7 +53,7 @@ export function DebatePanel({ debateResult }: DebatePanelProps) {
         <span className="text-xs text-zinc-600">— {responses.length} models participated</span>
       </div>
 
-      {/* Synthesized answer only */}
+      {/* Synthesized answer */}
       <Card className="border-amber-500/30">
         <CardHeader className="pb-3">
           <div className="flex items-center justify-between flex-wrap gap-2">
@@ -80,7 +92,7 @@ export function DebatePanel({ debateResult }: DebatePanelProps) {
             </div>
           )}
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div
             className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap break-words overflow-hidden response-content"
             dangerouslySetInnerHTML={{
@@ -88,8 +100,94 @@ export function DebatePanel({ debateResult }: DebatePanelProps) {
                 .replace(/\*\*(.*?)\*\*/g, '<strong class="text-zinc-100 font-semibold">$1</strong>')
             }}
           />
+
+          {/* Toggle to see model comparison */}
+          <button
+            onClick={() => setShowComparison(!showComparison)}
+            className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors pt-1 border-t border-zinc-800 w-full"
+          >
+            {showComparison ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            {showComparison ? 'Hide model comparison' : 'See how models compared'}
+          </button>
         </CardContent>
       </Card>
+
+      {/* Expandable comparison section */}
+      {showComparison && (
+        <div className="space-y-4">
+          {/* Model responses */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
+            {validResponses.map((response) => (
+              <ResponseCard key={response.provider} response={response} collapsible />
+            ))}
+          </div>
+
+          {/* Score table */}
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Trophy className="w-4 h-4 text-amber-400" />
+                Scores
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-zinc-800">
+                      <th className="text-left pb-2 text-zinc-500 font-medium pr-4">Model</th>
+                      {SCORE_DIMENSIONS.map((dim) => (
+                        <th key={dim.key} className="text-center pb-2 text-zinc-500 font-medium px-2 hidden sm:table-cell">
+                          {dim.label}
+                        </th>
+                      ))}
+                      <th className="text-center pb-2 text-zinc-400 font-semibold px-2">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {scores.map((score) => {
+                      const isWinner = score.provider === winner;
+                      return (
+                        <tr
+                          key={score.provider}
+                          className={cn('border-b border-zinc-800/50', isWinner && 'bg-amber-500/5')}
+                        >
+                          <td className="py-2 pr-4">
+                            <div className="flex items-center gap-1.5">
+                              {isWinner && <Trophy className="w-3 h-3 text-amber-400 shrink-0" />}
+                              <span className={cn('font-medium', isWinner ? 'text-zinc-100' : 'text-zinc-400')}>
+                                {getProviderLabel(score.provider)}
+                              </span>
+                            </div>
+                          </td>
+                          {SCORE_DIMENSIONS.map((dim) => {
+                            const val = score[dim.key];
+                            return (
+                              <td key={dim.key} className="py-2 px-2 text-center hidden sm:table-cell">
+                                <span className={cn(
+                                  'font-medium tabular-nums',
+                                  val >= 8.5 ? 'text-emerald-400' : val >= 7 ? 'text-zinc-300' : 'text-zinc-500',
+                                )}>
+                                  {val.toFixed(1)}
+                                </span>
+                              </td>
+                            );
+                          })}
+                          <td className="py-2 px-2 text-center">
+                            <span className={cn('font-bold tabular-nums text-sm', isWinner ? 'text-amber-400' : 'text-zinc-400')}>
+                              {score.totalScore.toFixed(2)}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
