@@ -157,7 +157,7 @@ export function PromptInput({ onSubmit, onStop }: PromptInputProps) {
           {documents.map((doc) => (
             <div
               key={doc.id}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-300 max-w-[180px] group"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-300 max-w-[130px] sm:max-w-[180px] group"
             >
               {doc.contentType === 'pdf'
                 ? <FileType className="w-3.5 h-3.5 text-red-400 shrink-0" />

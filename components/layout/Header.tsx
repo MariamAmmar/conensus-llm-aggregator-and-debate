@@ -92,7 +92,7 @@ export function Header() {
               {showUserMenu && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
-                  <div className="absolute right-0 top-10 z-50 w-52 bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl overflow-hidden">
+                  <div className="absolute right-0 top-10 z-50 w-[calc(100vw-2rem)] sm:w-52 bg-zinc-900 border border-zinc-800 rounded-xl shadow-xl overflow-hidden">
                     {/* Avatar + name */}
                     <div className="flex items-center gap-3 px-3 py-3 border-b border-zinc-800">
                       <div className="relative shrink-0">

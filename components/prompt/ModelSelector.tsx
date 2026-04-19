@@ -134,7 +134,7 @@ export function ModelSelector() {
               key={opt.id}
               onClick={() => handleTopLevel(opt.id)}
               className={cn(
-                'inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-150',
+                'inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-150 flex-1 sm:flex-none justify-center sm:justify-start',
                 isActive
                   ? topActiveColor[opt.id]
                   : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 hover:bg-zinc-800',

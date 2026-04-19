@@ -73,7 +73,7 @@ export function DebatePanel({ debateResult }: DebatePanelProps) {
                 <tr className="border-b border-zinc-800">
                   <th className="text-left pb-2 text-zinc-500 font-medium pr-4">Model</th>
                   {SCORE_DIMENSIONS.map((dim) => (
-                    <th key={dim.key} className="text-center pb-2 text-zinc-500 font-medium px-2">
+                    <th key={dim.key} className="text-center pb-2 text-zinc-500 font-medium px-2 hidden sm:table-cell">
                       {dim.label}
                     </th>
                   ))}
@@ -102,7 +102,7 @@ export function DebatePanel({ debateResult }: DebatePanelProps) {
                       {SCORE_DIMENSIONS.map((dim) => {
                         const val = score[dim.key];
                         return (
-                          <td key={dim.key} className="py-2 px-2 text-center">
+                          <td key={dim.key} className="py-2 px-2 text-center hidden sm:table-cell">
                             <span
                               className={cn(
                                 'font-medium tabular-nums',
@@ -182,7 +182,7 @@ export function DebatePanel({ debateResult }: DebatePanelProps) {
         </CardHeader>
         <CardContent>
           <div
-            className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap response-content"
+            className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap break-words overflow-hidden response-content"
             dangerouslySetInnerHTML={{
               __html: synthesizedAnswer
                 .replace(/\*\*(.*?)\*\*/g, '<strong class="text-zinc-100 font-semibold">$1</strong>')

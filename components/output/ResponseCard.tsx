@@ -142,7 +142,7 @@ export function ResponseCard({ response, isLoading, onVote, voted, collapsible }
       </CardHeader>
       <CardContent className="pt-0 space-y-3">
         <div
-          className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap response-content"
+          className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap break-words overflow-hidden response-content"
           dangerouslySetInnerHTML={{ __html: formatResponseContent(displayContent) }}
         />
         {isTruncated && (
