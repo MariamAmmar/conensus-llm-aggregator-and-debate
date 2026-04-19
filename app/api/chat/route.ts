@@ -145,7 +145,9 @@ If a user asks what you can do, what this app does, or how it works, explain the
 - Debate mode: all models answer independently, then score each other's responses, and the winner synthesizes a final answer incorporating the best insights from all.
 - Image mode: generates images using DALL-E 3 (OpenAI) or Imagen (Google), auto-selected based on the prompt style.
 - The platform remembers facts about the user across conversations to personalize responses over time.
-Answer naturally and conversationally — do not recite this as a list unless the user asks for details.`;
+Answer naturally and conversationally — do not recite this as a list unless the user asks for details.
+
+Be concise. Give the most useful answer in as few words as needed — no padding, no repetition, no unnecessary preamble.`;
 
     // Build memory context prefix to inject into system prompts
     const memoryContext = userMemory.length > 0
@@ -216,7 +218,7 @@ Answer naturally and conversationally — do not recite this as a list unless th
           if (!provider) return null;
           const providerHistory = (providerConversations as Record<string, ConversationMessage[]>)[pid] ?? [];
           const docs = pid === 'anthropic' ? pdfDocs : [];
-          return provider.complete(augmentedPrompt, systemPrefix, 1024, 'standard', providerHistory, images, docs);
+          return provider.complete(augmentedPrompt, systemPrefix, 512, 'standard', providerHistory, images, docs);
         }),
       );
 
@@ -244,7 +246,7 @@ Answer naturally and conversationally — do not recite this as a list unless th
           if (!provider) return null;
           const providerHistory = providerConversations[pid] ?? [];
           const docs = pid === 'anthropic' ? pdfDocs : [];
-          return provider.complete(augmentedPrompt, systemPrefix, 1024, 'standard', providerHistory, images, docs);
+          return provider.complete(augmentedPrompt, systemPrefix, 512, 'standard', providerHistory, images, docs);
         }),
       );
 
@@ -339,14 +341,14 @@ Answer naturally and conversationally — do not recite this as a list unless th
     const tier: ComputeTier = (routerDecision as { computeTier?: ComputeTier }).computeTier ?? 'standard';
 
     const providerDocs = providerId === 'anthropic' ? pdfDocs : [];
-    let response = await provider.complete(augmentedPrompt, systemPrefix, 1024, tier, history, images, providerDocs);
+    let response = await provider.complete(augmentedPrompt, systemPrefix, 512, tier, history, images, providerDocs);
 
     // Fallback if primary provider errored
     if (response.error && routerDecision.fallbackModel) {
       const fallback = TEXT_PROVIDERS[routerDecision.fallbackModel];
       if (fallback) {
         const fallbackDocs = routerDecision.fallbackModel === 'anthropic' ? pdfDocs : [];
-        response = await fallback.complete(augmentedPrompt, systemPrefix, 1024, tier, history, images, fallbackDocs);
+        response = await fallback.complete(augmentedPrompt, systemPrefix, 512, tier, history, images, fallbackDocs);
       }
     }
 
