@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react';
 import { X, CreditCard, CheckCircle, Clock, XCircle, Loader2, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { User } from '@supabase/supabase-js';
-import { createAdminClient } from '@/lib/supabase';
 
 interface Subscription {
   status: string;

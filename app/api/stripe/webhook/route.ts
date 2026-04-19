@@ -46,10 +46,12 @@ export async function POST(request: NextRequest) {
         const session = event.data.object as Stripe.Checkout.Session;
         if (session.mode !== 'subscription') break;
 
-        const userId = session.metadata?.supabase_user_id;
+        const sub = await stripe.subscriptions.retrieve(session.subscription as string);
+        // supabase_user_id is on subscription metadata (set via subscription_data.metadata)
+        const userId = (sub.metadata as Record<string, string>)?.supabase_user_id
+          ?? session.metadata?.supabase_user_id;
         if (!userId) break;
 
-        const sub = await stripe.subscriptions.retrieve(session.subscription as string);
         await admin.from('user_subscriptions').upsert({
           user_id: userId,
           stripe_customer_id: session.customer as string,
