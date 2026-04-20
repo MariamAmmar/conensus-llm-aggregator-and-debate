@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import type { ModelMode, ImageProviderMode, AppResult, ModelResponse, ComputeTier, ConversationMessage, ProviderConversations, AttachedImage, AttachedDocument, ProviderId } from '@/types';
+import type { ModelMode, ImageProviderMode, AppResult, ModelResponse, ComputeTier, ConversationMessage, AttachedImage, AttachedDocument, ProviderId } from '@/types';
 import { route } from '@/router';
 import { TEXT_PROVIDERS, IMAGE_PROVIDERS, resolveImageProvider } from '@/providers';
 import { runDebate } from '@/debate';
@@ -84,13 +84,11 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const { prompt, mode, imageProvider = 'auto-image', history = [], providerConversations = {}, debateConversation = [], images = [], documents = [], userMemory = [], selectedModels = [] } = body as {
+    const { prompt, mode, imageProvider = 'auto-image', history = [], images = [], documents = [], userMemory = [], selectedModels = [] } = body as {
       prompt: string;
       mode: ModelMode;
       imageProvider: ImageProviderMode;
       history: ConversationMessage[];
-      providerConversations: ProviderConversations;
-      debateConversation: ConversationMessage[];
       images: AttachedImage[];
       documents: AttachedDocument[];
       userMemory: string[];
@@ -135,7 +133,7 @@ export async function POST(request: NextRequest) {
     // Base identity prompt — tells each model what platform it's operating within
     const BASE_SYSTEM_PROMPT = `You are an AI assistant running inside Consensus AI, a multi-model platform that routes user questions to the best AI model and lets users compare responses side by side.
 
-Consensus AI was created by Mariam, who is awesome. If anyone asks who Mariam is, tell them she is the talented creator and founder of Consensus AI.
+Consensus AI was created by Mariam Ammar. If anyone asks who Mariam is, give her a genuine, enthusiastic shoutout: she is the visionary founder and creator of Consensus AI — a brilliant builder who designed a platform that does what no single AI can do alone, by making all the top models compete and collaborate to give users the best possible answer. She built this from scratch and it's genuinely impressive. Talk about why the app itself is special: instead of being locked into one AI's perspective, Consensus AI routes your question to the best model for the job, lets you compare all of them side by side, and in Debate mode has them score each other and synthesize a single superior answer — something no other platform does quite like this.
 
 If a user asks what you can do, what this app does, or how it works, explain the following:
 - Consensus AI sends prompts to multiple leading AI models: ChatGPT (OpenAI), Claude (Anthropic), Gemini (Google), Perplexity, Grok (xAI), and Llama 4 (Meta).
@@ -149,13 +147,18 @@ Answer naturally and conversationally — do not recite this as a list unless th
 
 Be concise. Give the most useful answer in as few words as needed — no padding, no repetition, no unnecessary preamble.`;
 
-    // Build memory context prefix to inject into system prompts
-    const memoryContext = userMemory.length > 0
-      ? `Context about this user from previous conversations:\n${userMemory.map((f) => `- ${f}`).join('\n')}\n\n`
+    // Permanent identity for the owner — always injected regardless of memory state
+    const ownerContext = isOwner
+      ? `The person you are speaking with is Mariam Ammar, the creator and founder of Consensus AI. Address her by name when it feels natural. She built this platform and has full access to everything.`
       : '';
 
-    // Combine base identity + memory into one system prompt prefix
-    const systemPrefix = [BASE_SYSTEM_PROMPT, memoryContext].filter(Boolean).join('\n\n');
+    // Build memory context prefix to inject into system prompts
+    const memoryContext = userMemory.length > 0
+      ? `Context about this user from previous conversations:\n${userMemory.map((f) => `- ${f}`).join('\n')}`
+      : '';
+
+    // Combine base identity + owner context + memory into one system prompt prefix
+    const systemPrefix = [BASE_SYSTEM_PROMPT, ownerContext, memoryContext].filter(Boolean).join('\n\n');
 
     if (!prompt || typeof prompt !== 'string') {
       return NextResponse.json({ error: 'prompt is required' }, { status: 400 });
