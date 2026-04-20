@@ -29,7 +29,10 @@ interface AppActions {
   syncSessionsFromDB: () => Promise<void>;
   // Memory
   mergeMemoryFacts: (facts: MemoryFact[]) => void;
+  removeMemoryFact: (fact: string) => void;
   clearMemory: () => void;
+  // Preferences
+  setUserPreferences: (prefs: string) => void;
   // Single-model / auto
   addConversationTurn: (userPrompt: string, assistantResponse: string) => void;
   clearConversation: () => void;
@@ -62,6 +65,7 @@ export const useAppStore = create<AppStore>()(
   sessions: [],
   activeSessionId: null,
   userMemory: [],
+  userPreferences: '',
   conversation: [],
   providerConversations: {},
   debateConversation: [],
@@ -204,7 +208,10 @@ export const useAppStore = create<AppStore>()(
         .slice(0, 25); // cap at 25 facts
       return { userMemory: merged };
     }),
+  removeMemoryFact: (fact) =>
+    set((state) => ({ userMemory: state.userMemory.filter((f) => f.fact !== fact) })),
   clearMemory: () => set({ userMemory: [] }),
+  setUserPreferences: (prefs) => set({ userPreferences: prefs }),
 
   toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
   toggleSettings: () => set((state) => ({ settingsOpen: !state.settingsOpen })),

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Sparkles, PanelLeft, LogOut, User, CreditCard } from 'lucide-react';
+import { Sparkles, PanelLeft, LogOut, User, CreditCard, Settings2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAppStore } from '@/lib/store';
@@ -9,9 +9,10 @@ import { useAuth, signOut } from '@/lib/auth';
 import { LoginModal } from '@/components/auth/LoginModal';
 import { AvatarUpload } from '@/components/auth/AvatarUpload';
 import { AccountModal } from '@/components/auth/AccountModal';
+import { SettingsPanel } from '@/components/settings/SettingsPanel';
 
 export function Header() {
-  const { mockMode, toggleSidebar } = useAppStore();
+  const { mockMode, toggleSidebar, toggleSettings } = useAppStore();
   const { user, session, loading } = useAuth();
   const [showLogin, setShowLogin] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -66,8 +67,17 @@ export function Header() {
           )}
         </div>
 
-        {/* Right: auth */}
+        {/* Right: settings + auth */}
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleSettings}
+            className="text-zinc-400 hover:text-zinc-100"
+            aria-label="Settings"
+          >
+            <Settings2 className="w-4 h-4" />
+          </Button>
           {loading ? (
             <div className="w-8 h-8 rounded-full bg-zinc-800 animate-pulse" />
           ) : user ? (
@@ -157,6 +167,7 @@ export function Header() {
           onClose={() => setShowAccount(false)}
         />
       )}
+      <SettingsPanel />
     </>
   );
 }

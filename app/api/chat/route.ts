@@ -125,6 +125,7 @@ export async function POST(request: NextRequest) {
       images = [],
       documents = [],
       userMemory = [],
+      userPreferences = '',
       selectedModels = [],
     } = body as {
       prompt: string;
@@ -134,6 +135,7 @@ export async function POST(request: NextRequest) {
       images: AttachedImage[];
       documents: AttachedDocument[];
       userMemory: string[];
+      userPreferences: string;
       selectedModels: ModelMode[];
     };
 
@@ -178,7 +180,10 @@ export async function POST(request: NextRequest) {
     const memoryContext = userMemory.length > 0
       ? `Context about this user from previous conversations:\n${userMemory.map((f) => `- ${f}`).join('\n')}`
       : '';
-    const systemPrefix = [BASE_SYSTEM_PROMPT, ownerContext, memoryContext].filter(Boolean).join('\n\n');
+    const prefsContext = userPreferences.trim()
+      ? `User preferences (always follow these):\n${userPreferences.trim()}`
+      : '';
+    const systemPrefix = [BASE_SYSTEM_PROMPT, ownerContext, memoryContext, prefsContext].filter(Boolean).join('\n\n');
 
     const id = generateId();
 

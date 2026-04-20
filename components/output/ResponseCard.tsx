@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Globe, AlertCircle, Clock, ThumbsUp } from 'lucide-react';
+import { Globe, AlertCircle, Clock, ThumbsUp, Copy, Check } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import type { ModelResponse, ProviderId } from '@/types';
@@ -60,6 +60,13 @@ interface ResponseCardProps {
 export function ResponseCard({ response, isLoading, onVote, voted, collapsible }: ResponseCardProps) {
   const [voting, setVoting] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  async function handleCopy() {
+    await navigator.clipboard.writeText(response.content);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  }
   const isTruncated = collapsible && response.content.length > PREVIEW_CHARS;
   const displayContent = isTruncated && !expanded
     ? response.content.slice(0, PREVIEW_CHARS).trimEnd() + '…'
@@ -153,8 +160,15 @@ export function ResponseCard({ response, isLoading, onVote, voted, collapsible }
             {expanded ? 'See less ↑' : 'See more ↓'}
           </button>
         )}
-        {onVote && (
-          <div className="flex justify-end pt-1">
+        <div className="flex items-center justify-between pt-1">
+          <button
+            onClick={handleCopy}
+            className="inline-flex items-center gap-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+          >
+            {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+            {copied ? 'Copied' : 'Copy'}
+          </button>
+          {onVote && (
             <button
               onClick={handleVote}
               disabled={voting || someoneVoted}
@@ -170,8 +184,8 @@ export function ResponseCard({ response, isLoading, onVote, voted, collapsible }
               <ThumbsUp className={cn('w-3 h-3', voting && 'animate-pulse')} />
               {isVoted ? 'Best answer' : 'Vote'}
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </CardContent>
     </Card>
   );

@@ -169,6 +169,7 @@ export interface AppState {
   sessions: ChatSession[];
   activeSessionId: string | null;
   userMemory: MemoryFact[];
+  userPreferences: string;
   // Single-model / auto conversation (one assistant voice)
   conversation: ConversationMessage[];
   // Per-provider conversations for All Models mode

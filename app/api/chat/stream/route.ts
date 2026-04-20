@@ -81,9 +81,9 @@ export async function POST(request: NextRequest) {
   // ── End auth ───────────────────────────────────────────────────────────────
 
   const body = await request.json();
-  const { prompt, mode, history = [], images = [], userMemory = [] } = body as {
+  const { prompt, mode, history = [], images = [], userMemory = [], userPreferences = '' } = body as {
     prompt: string; mode: ModelMode;
-    history: ConversationMessage[]; images: AttachedImage[]; userMemory: string[];
+    history: ConversationMessage[]; images: AttachedImage[]; userMemory: string[]; userPreferences: string;
   };
 
   if (!prompt?.trim()) return Response.json({ error: 'prompt is required' }, { status: 400 });
@@ -105,7 +105,10 @@ export async function POST(request: NextRequest) {
   const memoryContext = userMemory.length > 0
     ? `Context about this user:\n${userMemory.map((f) => `- ${f}`).join('\n')}`
     : '';
-  const systemPrompt = [BASE_SYSTEM_PROMPT, ownerContext, memoryContext].filter(Boolean).join('\n\n');
+  const prefsContext = userPreferences.trim()
+    ? `User preferences (always follow these):\n${userPreferences.trim()}`
+    : '';
+  const systemPrompt = [BASE_SYSTEM_PROMPT, ownerContext, memoryContext, prefsContext].filter(Boolean).join('\n\n');
 
   const routerDecision = route(prompt, mode);
   const providerId = routerDecision.selectedModel as string;

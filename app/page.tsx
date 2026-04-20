@@ -11,10 +11,11 @@ import { PromptInput } from '@/components/prompt/PromptInput';
 import { OutputPanel } from '@/components/output/OutputPanel';
 import { LoginModal } from '@/components/auth/LoginModal';
 import { TrialModal } from '@/components/auth/TrialModal';
-import { Sparkles, AlertCircle, CheckCircle } from 'lucide-react';
+import { Sparkles, AlertCircle, CheckCircle, RotateCcw } from 'lucide-react';
 import type { HistoryEntry, AppResult, ChatTurn, AttachedImage, AttachedDocument } from '@/types';
 import { generateId } from '@/utils';
 import { formatResponseContent } from '@/components/output/ResponseCard';
+import { DebateProgress } from '@/components/output/DebateProgress';
 
 const DEBATE_PROMPTS = [
   'Will AI take most jobs in the next 10 years?',
@@ -70,6 +71,7 @@ export default function Home() {
     saveSession,
     syncSessionsFromDB,
     userMemory,
+    userPreferences,
     mergeMemoryFacts,
   } = useAppStore();
 
@@ -186,7 +188,7 @@ export default function Home() {
           const streamStart = Date.now();
           const res = await fetch('/api/chat/stream', {
             method: 'POST', headers, signal: abortRef.current.signal,
-            body: JSON.stringify({ prompt: submittedPrompt, mode: selectedMode, history: conversation, images, userMemory: userMemory.map((f) => f.fact) }),
+            body: JSON.stringify({ prompt: submittedPrompt, mode: selectedMode, history: conversation, images, userMemory: userMemory.map((f) => f.fact), userPreferences }),
           });
 
           // Auth/limit errors arrive as JSON before the stream
@@ -237,7 +239,7 @@ export default function Home() {
           // Non-streaming: debate, all-models, image, multi-select
           const res = await fetch('/api/chat', {
             method: 'POST', headers, signal: abortRef.current.signal,
-            body: JSON.stringify({ prompt: submittedPrompt, mode: selectedMode, imageProvider: selectedImageProvider, history: conversation, providerConversations, debateConversation, images, documents, userMemory: userMemory.map((f) => f.fact), selectedModels }),
+            body: JSON.stringify({ prompt: submittedPrompt, mode: selectedMode, imageProvider: selectedImageProvider, history: conversation, providerConversations, debateConversation, images, documents, userMemory: userMemory.map((f) => f.fact), userPreferences, selectedModels }),
           });
           const data = await res.json();
           if (res.status === 429 && data.code === 'LIMIT_REACHED') { updateTurn(turnId, { loading: false, error: null }); setLoading(false); setShowLoginGate(true); return; }
@@ -404,6 +406,8 @@ export default function Home() {
                           <div dangerouslySetInnerHTML={{ __html: formatResponseContent(streamingContent[turn.id]) }} />
                           <span className="inline-block w-0.5 h-4 bg-indigo-400 animate-pulse ml-0.5 -mb-0.5" />
                         </div>
+                      ) : turn.mode === 'debate' ? (
+                        <DebateProgress />
                       ) : (
                         <div className="flex items-center gap-3 py-2">
                           <div className="relative w-8 h-8 shrink-0">
@@ -411,8 +415,7 @@ export default function Home() {
                             <div className="absolute inset-0 rounded-full border-2 border-t-indigo-500 animate-spin" />
                           </div>
                           <p className="text-zinc-400 text-sm">
-                            {turn.mode === 'debate' ? 'Running debate across all models...'
-                              : turn.mode === 'image' ? 'Generating image...'
+                            {turn.mode === 'image' ? 'Generating image...'
                               : turn.mode === 'all' ? 'Querying all models...'
                               : 'Thinking...'}
                           </p>
@@ -430,7 +433,19 @@ export default function Home() {
 
                     {/* Result */}
                     {turn.result && (
-                      <OutputPanel result={turn.result} />
+                      <>
+                        <OutputPanel result={turn.result} />
+                        <div className="flex justify-start">
+                          <button
+                            onClick={() => handleSubmit(turn.prompt, turn.images, turn.documents)}
+                            disabled={isLoading}
+                            className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors disabled:opacity-40"
+                          >
+                            <RotateCcw className="w-3 h-3" />
+                            Regenerate
+                          </button>
+                        </div>
+                      </>
                     )}
                   </div>
                 ))}
