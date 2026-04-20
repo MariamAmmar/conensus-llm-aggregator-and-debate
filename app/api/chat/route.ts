@@ -10,7 +10,8 @@ import { OWNER_EMAIL } from '@/lib/stripe';
 export const dynamic = 'force-dynamic';
 
 const FREE_TOKEN_LIMIT = 15000;
-const FREE_DEBATE_LIMIT = 3; // debate is ~40x more expensive than a single prompt
+const FREE_DEBATE_LIMIT = 3;       // anon: 3 debates lifetime
+const PAID_DEBATE_MONTHLY_LIMIT = 30; // subscribers: 30 debates per calendar month
 const MAX_PROMPT_LENGTH = 32000; // ~8K tokens — prevent abuse
 
 const MODE_TO_PROVIDER: Partial<Record<ModelMode, string>> = {
@@ -153,6 +154,31 @@ export async function POST(request: NextRequest) {
     }
     if (prompt.length > MAX_PROMPT_LENGTH) {
       return NextResponse.json({ error: 'Prompt too long' }, { status: 400 });
+    }
+
+    // Subscriber monthly debate cap
+    if (!isOwner && userId && mode === 'debate') {
+      const admin = createAdminClient();
+      const month = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+      const { data: usage } = await admin
+        .from('user_debate_usage')
+        .select('count')
+        .eq('user_id', userId)
+        .eq('month', month)
+        .single();
+
+      const debateCount = (usage?.count as number | null) ?? 0;
+      if (debateCount >= PAID_DEBATE_MONTHLY_LIMIT) {
+        return NextResponse.json(
+          { error: 'Monthly debate limit reached', code: 'DEBATE_LIMIT_REACHED' },
+          { status: 429 },
+        );
+      }
+
+      await admin.from('user_debate_usage').upsert(
+        { user_id: userId, month, count: debateCount + 1 },
+        { onConflict: 'user_id,month' },
+      );
     }
 
     // Anon usage tracking — token count + debate limit
