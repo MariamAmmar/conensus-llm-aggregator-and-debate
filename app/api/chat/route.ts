@@ -7,9 +7,17 @@ import { generateId } from '@/utils';
 import { supabase, createAdminClient } from '@/lib/supabase';
 import { OWNER_EMAIL } from '@/lib/stripe';
 
-const FREE_TOKEN_LIMIT = 15000;
+export const dynamic = 'force-dynamic';
 
-// ~4 characters per token is a good approximation for English text
+const FREE_TOKEN_LIMIT = 15000;
+const MAX_PROMPT_LENGTH = 32000; // ~8K tokens — prevent abuse
+
+const MODE_TO_PROVIDER: Partial<Record<ModelMode, string>> = {
+  chatgpt: 'openai', claude: 'anthropic', gemini: 'gemini',
+  perplexity: 'perplexity', grok: 'grok', llama: 'llama',
+  o4mini: 'o4mini', deepseek: 'deepseek',
+};
+
 function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
@@ -22,116 +30,7 @@ function getIP(request: NextRequest): string {
   );
 }
 
-export async function POST(request: NextRequest) {
-  const start = Date.now();
-
-  // ── Access control ─────────────────────────────────────────────────────────
-  const authHeader = request.headers.get('Authorization');
-  const token = authHeader?.replace('Bearer ', '') ?? '';
-  let userEmail: string | null = null;
-  let userId: string | null = null;
-
-  if (token) {
-    const { data } = await supabase.auth.getUser(token);
-    userEmail = data.user?.email ?? null;
-    userId = data.user?.id ?? null;
-  }
-
-  // Owner gets unlimited free access
-  const isOwner = userEmail === OWNER_EMAIL;
-  let anonIP: string | null = null; // set when anonymous user passes the limit check
-
-  if (!isOwner) {
-    const admin = createAdminClient();
-
-    if (userId) {
-      // Logged-in user: check for active or trialing subscription
-      const { data: sub } = await admin
-        .from('user_subscriptions')
-        .select('status')
-        .eq('user_id', userId)
-        .single();
-
-      const hasAccess = sub && ['active', 'trialing'].includes(sub.status as string);
-      if (!hasAccess) {
-        return NextResponse.json(
-          { error: 'Subscription required', code: 'SUBSCRIPTION_REQUIRED' },
-          { status: 402 },
-        );
-      }
-    } else {
-      // Anonymous user: IP-based token limit
-      const ip = getIP(request);
-      const { data: usage } = await admin
-        .from('ip_usage')
-        .select('token_count')
-        .eq('ip', ip)
-        .single();
-
-      const tokenCount = (usage?.token_count as number | null) ?? 0;
-      if (tokenCount >= FREE_TOKEN_LIMIT) {
-        return NextResponse.json(
-          { error: 'Free limit reached', code: 'LIMIT_REACHED', tokensUsed: tokenCount },
-          { status: 429 },
-        );
-      }
-
-      // Store IP so we can increment after body is parsed below
-      anonIP = ip;
-    }
-  }
-  // ── End access control ─────────────────────────────────────────────────────
-
-  try {
-    const body = await request.json();
-    const { prompt, mode, imageProvider = 'auto-image', history = [], images = [], documents = [], userMemory = [], selectedModels = [] } = body as {
-      prompt: string;
-      mode: ModelMode;
-      imageProvider: ImageProviderMode;
-      history: ConversationMessage[];
-      images: AttachedImage[];
-      documents: AttachedDocument[];
-      userMemory: string[];
-      selectedModels: ModelMode[];
-    };
-
-    // Map from ModelMode → provider ID
-    const MODE_TO_PROVIDER: Partial<Record<ModelMode, string>> = {
-      chatgpt: 'openai', claude: 'anthropic', gemini: 'gemini',
-      perplexity: 'perplexity', grok: 'grok', llama: 'llama',
-      o4mini: 'o4mini', deepseek: 'deepseek',
-    };
-
-    // Increment token count for anonymous users now that we have the prompt
-    if (anonIP) {
-      const admin = createAdminClient();
-      const tokens = estimateTokens(prompt);
-      const { data: current } = await admin
-        .from('ip_usage')
-        .select('token_count')
-        .eq('ip', anonIP)
-        .single();
-      const existing = (current?.token_count as number | null) ?? 0;
-      await admin.from('ip_usage').upsert(
-        { ip: anonIP, token_count: existing + tokens, updated_at: new Date().toISOString() },
-        { onConflict: 'ip' },
-      );
-    }
-
-    // Inject text document contents into the prompt so all providers benefit
-    const textDocContext = documents
-      .filter((d) => d.contentType === 'text')
-      .map((d) => `<document name="${d.name}">\n${d.content}\n</document>`)
-      .join('\n\n');
-    const augmentedPrompt = textDocContext
-      ? `${textDocContext}\n\n${prompt}`
-      : prompt;
-
-    // PDFs are passed directly to providers that support them (Anthropic)
-    const pdfDocs = documents.filter((d) => d.contentType === 'pdf');
-
-    // Base identity prompt — tells each model what platform it's operating within
-    const BASE_SYSTEM_PROMPT = `You are an AI assistant running inside Consensus AI, a multi-model platform that routes user questions to the best AI model and lets users compare responses side by side.
+const BASE_SYSTEM_PROMPT = `You are an AI assistant running inside Consensus AI, a multi-model platform that routes user questions to the best AI model and lets users compare responses side by side.
 
 Consensus AI was created by Mariam Ammar. If anyone asks who Mariam is, who built this, or who created Consensus AI, respond with genuine enthusiasm and make it memorable. Here is exactly what to convey:
 
@@ -160,22 +59,126 @@ Answer naturally and conversationally — do not recite this as a list unless th
 
 Be concise. Give the most useful answer in as few words as needed — no padding, no repetition, no unnecessary preamble.`;
 
-    // Permanent identity for the owner — always injected regardless of memory state
+export async function POST(request: NextRequest) {
+  const start = Date.now();
+
+  // ── Access control ─────────────────────────────────────────────────────────
+  const authHeader = request.headers.get('Authorization');
+  const token = authHeader?.replace('Bearer ', '') ?? '';
+  let userEmail: string | null = null;
+  let userId: string | null = null;
+
+  if (token) {
+    const { data } = await supabase.auth.getUser(token);
+    userEmail = data.user?.email ?? null;
+    userId = data.user?.id ?? null;
+  }
+
+  const isOwner = userEmail === OWNER_EMAIL;
+  let anonIP: string | null = null;
+
+  if (!isOwner) {
+    const admin = createAdminClient();
+
+    if (userId) {
+      const { data: sub } = await admin
+        .from('user_subscriptions')
+        .select('status')
+        .eq('user_id', userId)
+        .single();
+
+      const hasAccess = sub && ['active', 'trialing'].includes(sub.status as string);
+      if (!hasAccess) {
+        return NextResponse.json(
+          { error: 'Subscription required', code: 'SUBSCRIPTION_REQUIRED' },
+          { status: 402 },
+        );
+      }
+    } else {
+      const ip = getIP(request);
+      const { data: usage } = await admin
+        .from('ip_usage')
+        .select('token_count')
+        .eq('ip', ip)
+        .single();
+
+      const tokenCount = (usage?.token_count as number | null) ?? 0;
+      if (tokenCount >= FREE_TOKEN_LIMIT) {
+        return NextResponse.json(
+          { error: 'Free limit reached', code: 'LIMIT_REACHED', tokensUsed: tokenCount },
+          { status: 429 },
+        );
+      }
+
+      anonIP = ip;
+    }
+  }
+  // ── End access control ─────────────────────────────────────────────────────
+
+  try {
+    const body = await request.json();
+    const {
+      prompt,
+      mode,
+      imageProvider = 'auto-image',
+      history = [],
+      images = [],
+      documents = [],
+      userMemory = [],
+      selectedModels = [],
+    } = body as {
+      prompt: string;
+      mode: ModelMode;
+      imageProvider: ImageProviderMode;
+      history: ConversationMessage[];
+      images: AttachedImage[];
+      documents: AttachedDocument[];
+      userMemory: string[];
+      selectedModels: ModelMode[];
+    };
+
+    // Validate prompt before doing anything else
+    if (!prompt || typeof prompt !== 'string' || !prompt.trim()) {
+      return NextResponse.json({ error: 'prompt is required' }, { status: 400 });
+    }
+    if (prompt.length > MAX_PROMPT_LENGTH) {
+      return NextResponse.json({ error: 'Prompt too long' }, { status: 400 });
+    }
+
+    // Increment token count for anonymous users
+    if (anonIP) {
+      const admin = createAdminClient();
+      const tokens = estimateTokens(prompt);
+      const { data: current } = await admin
+        .from('ip_usage')
+        .select('token_count')
+        .eq('ip', anonIP)
+        .single();
+      const existing = (current?.token_count as number | null) ?? 0;
+      await admin.from('ip_usage').upsert(
+        { ip: anonIP, token_count: existing + tokens, updated_at: new Date().toISOString() },
+        { onConflict: 'ip' },
+      );
+    }
+
+    // Inject text document contents into the prompt so all providers benefit
+    const textDocContext = documents
+      .filter((d) => d.contentType === 'text')
+      .map((d) => `<document name="${d.name}">\n${d.content}\n</document>`)
+      .join('\n\n');
+    const augmentedPrompt = textDocContext ? `${textDocContext}\n\n${prompt}` : prompt;
+
+    // PDFs passed directly to providers that support them (Anthropic)
+    const pdfDocs = documents.filter((d) => d.contentType === 'pdf');
+
+    // Owner identity + memory context
     const ownerContext = isOwner
       ? `The person you are speaking with is Mariam Ammar, the creator and founder of Consensus AI. Address her by name when it feels natural. She built this platform and has full access to everything.`
       : '';
-
-    // Build memory context prefix to inject into system prompts
     const memoryContext = userMemory.length > 0
       ? `Context about this user from previous conversations:\n${userMemory.map((f) => `- ${f}`).join('\n')}`
       : '';
-
-    // Combine base identity + owner context + memory into one system prompt prefix
     const systemPrefix = [BASE_SYSTEM_PROMPT, ownerContext, memoryContext].filter(Boolean).join('\n\n');
-
-    if (!prompt || typeof prompt !== 'string') {
-      return NextResponse.json({ error: 'prompt is required' }, { status: 400 });
-    }
 
     const id = generateId();
 
@@ -184,202 +187,85 @@ Be concise. Give the most useful answer in as few words as needed — no padding
       const provider = resolveImageProvider(prompt, imageProvider);
       try {
         const imageResult = await provider.generate(prompt);
-        const result: AppResult = {
-          id,
-          prompt,
-          mode,
-          routerDecision: null,
-          responses: [],
-          debateResult: null,
-          finalAnswer: '',
-          imageResult,
-          timestamp: new Date(),
-          durationMs: Date.now() - start,
-        };
-        return NextResponse.json(result);
-      } catch (err) {
-        // Fallback to the other image provider
-        const fallbackProvider =
-          provider.id === 'openai-image'
-            ? IMAGE_PROVIDERS['gemini-image']
-            : IMAGE_PROVIDERS['openai-image'];
-
-        if (!fallbackProvider) throw err;
-
+        return NextResponse.json({ id, prompt, mode, routerDecision: null, responses: [], debateResult: null, finalAnswer: '', imageResult, timestamp: new Date(), durationMs: Date.now() - start } satisfies AppResult);
+      } catch {
+        const fallbackProvider = provider.id === 'openai-image' ? IMAGE_PROVIDERS['gemini-image'] : IMAGE_PROVIDERS['openai-image'];
+        if (!fallbackProvider) throw new Error('All image providers failed');
         const imageResult = await fallbackProvider.generate(prompt);
-        const result: AppResult = {
-          id,
-          prompt,
-          mode,
-          routerDecision: null,
-          responses: [],
-          debateResult: null,
-          finalAnswer: '',
-          imageResult,
-          timestamp: new Date(),
-          durationMs: Date.now() - start,
-        };
-        return NextResponse.json(result);
+        return NextResponse.json({ id, prompt, mode, routerDecision: null, responses: [], debateResult: null, finalAnswer: '', imageResult, timestamp: new Date(), durationMs: Date.now() - start } satisfies AppResult);
       }
     }
 
-    // ── Multi-select mode (2+ specific models chosen in Select panel) ────────
+    // ── Multi-select mode ────────────────────────────────────────────────────
     if (selectedModels.length > 1 && selectedModels.every((m) => m in MODE_TO_PROVIDER)) {
       const providerIds = selectedModels.map((m) => MODE_TO_PROVIDER[m]).filter(Boolean) as string[];
-
       const responses = await Promise.all(
         providerIds.map(async (pid) => {
-          const typedPid = pid as ProviderId;
-          const provider = TEXT_PROVIDERS[typedPid];
+          const provider = TEXT_PROVIDERS[pid as ProviderId];
           if (!provider) return null;
-          const docs = pid === 'anthropic' ? pdfDocs : [];
-          return provider.complete(augmentedPrompt, systemPrefix, 512, 'standard', history, images, docs);
+          return provider.complete(augmentedPrompt, systemPrefix, 512, 'standard', history, images, pid === 'anthropic' ? pdfDocs : []);
         }),
       );
-
-      const validResponses = responses.filter(Boolean) as ModelResponse[];
-      const result: AppResult = {
-        id, prompt, mode: 'all',
-        routerDecision: null,
-        responses: validResponses,
-        debateResult: null,
-        finalAnswer: '',
-        imageResult: null,
-        timestamp: new Date(),
-        durationMs: Date.now() - start,
-      };
-      return NextResponse.json(result);
+      return NextResponse.json({ id, prompt, mode: 'all', routerDecision: null, responses: responses.filter(Boolean) as ModelResponse[], debateResult: null, finalAnswer: '', imageResult: null, timestamp: new Date(), durationMs: Date.now() - start } satisfies AppResult);
     }
 
     // ── All models mode ──────────────────────────────────────────────────────
     if (mode === 'all') {
       const allProviders = ['openai', 'anthropic', 'gemini', 'perplexity', 'grok', 'llama', 'o4mini', 'deepseek'] as const;
-
       const responses = await Promise.all(
         allProviders.map(async (pid) => {
           const provider = TEXT_PROVIDERS[pid];
           if (!provider) return null;
-          const docs = pid === 'anthropic' ? pdfDocs : [];
-          return provider.complete(augmentedPrompt, systemPrefix, 512, 'standard', history, images, docs);
+          return provider.complete(augmentedPrompt, systemPrefix, 512, 'standard', history, images, pid === 'anthropic' ? pdfDocs : []);
         }),
       );
-
-      const validResponses = responses.filter(Boolean) as ModelResponse[];
-
-      const result: AppResult = {
-        id,
-        prompt,
-        mode,
-        routerDecision: null,
-        responses: validResponses,
-        debateResult: null,
-        finalAnswer: '',
-        imageResult: null,
-        timestamp: new Date(),
-        durationMs: Date.now() - start,
-      };
-      return NextResponse.json(result);
+      return NextResponse.json({ id, prompt, mode, routerDecision: null, responses: responses.filter(Boolean) as ModelResponse[], debateResult: null, finalAnswer: '', imageResult: null, timestamp: new Date(), durationMs: Date.now() - start } satisfies AppResult);
     }
 
     // ── Debate mode ──────────────────────────────────────────────────────────
     if (mode === 'debate') {
-      // All models share the debate conversation (synthesized answer as context)
       const debateResult = await runDebate(augmentedPrompt, history, systemPrefix);
-
-      const result: AppResult = {
-        id,
-        prompt,
-        mode,
-        routerDecision: null,
-        responses: debateResult.responses,
-        debateResult,
-        finalAnswer: debateResult.synthesizedAnswer,
-        imageResult: null,
-        timestamp: new Date(),
-        durationMs: Date.now() - start,
-      };
-      return NextResponse.json(result);
+      return NextResponse.json({ id, prompt, mode, routerDecision: null, responses: debateResult.responses, debateResult, finalAnswer: debateResult.synthesizedAnswer, imageResult: null, timestamp: new Date(), durationMs: Date.now() - start } satisfies AppResult);
     }
 
     // ── Auto + single model modes ────────────────────────────────────────────
     const routerDecision = route(augmentedPrompt, mode);
     const providerId = routerDecision.selectedModel;
 
-    // Auto-routed to an image provider
+    // Auto-routed to image
     if (routerDecision.requiresImageGeneration && IMAGE_PROVIDERS[providerId as keyof typeof IMAGE_PROVIDERS]) {
-      const imgProvider = IMAGE_PROVIDERS[providerId as keyof typeof IMAGE_PROVIDERS]
-        ?? IMAGE_PROVIDERS['openai-image']!;
+      const imgProvider = IMAGE_PROVIDERS[providerId as keyof typeof IMAGE_PROVIDERS] ?? IMAGE_PROVIDERS['openai-image']!;
       try {
         const imageResult = await imgProvider.generate(prompt);
-        return NextResponse.json({
-          id, prompt, mode,
-          routerDecision,
-          responses: [],
-          debateResult: null,
-          finalAnswer: '',
-          imageResult,
-          timestamp: new Date(),
-          durationMs: Date.now() - start,
-        } satisfies AppResult);
+        return NextResponse.json({ id, prompt, mode, routerDecision, responses: [], debateResult: null, finalAnswer: '', imageResult, timestamp: new Date(), durationMs: Date.now() - start } satisfies AppResult);
       } catch {
-        // Fallback to the other image provider
-        const fallbackId = routerDecision.fallbackModel as keyof typeof IMAGE_PROVIDERS;
-        const fallback = IMAGE_PROVIDERS[fallbackId];
+        const fallback = IMAGE_PROVIDERS[routerDecision.fallbackModel as keyof typeof IMAGE_PROVIDERS];
         if (fallback) {
           const imageResult = await fallback.generate(prompt);
-          return NextResponse.json({
-            id, prompt, mode,
-            routerDecision,
-            responses: [],
-            debateResult: null,
-            finalAnswer: '',
-            imageResult,
-            timestamp: new Date(),
-            durationMs: Date.now() - start,
-          } satisfies AppResult);
+          return NextResponse.json({ id, prompt, mode, routerDecision, responses: [], debateResult: null, finalAnswer: '', imageResult, timestamp: new Date(), durationMs: Date.now() - start } satisfies AppResult);
         }
         throw new Error('All image providers failed');
       }
     }
 
     const provider = TEXT_PROVIDERS[providerId];
-
     if (!provider) {
-      return NextResponse.json(
-        { error: `Provider "${providerId}" is not available` },
-        { status: 501 },
-      );
+      return NextResponse.json({ error: `Provider "${providerId}" is not available` }, { status: 501 });
     }
 
-    // In auto mode use the router's compute tier; manual mode defaults to standard
     const tier: ComputeTier = (routerDecision as { computeTier?: ComputeTier }).computeTier ?? 'standard';
-
-    const providerDocs = providerId === 'anthropic' ? pdfDocs : [];
-    let response = await provider.complete(augmentedPrompt, systemPrefix, 512, tier, history, images, providerDocs);
+    let response = await provider.complete(augmentedPrompt, systemPrefix, 512, tier, history, images, providerId === 'anthropic' ? pdfDocs : []);
 
     // Fallback if primary provider errored
     if (response.error && routerDecision.fallbackModel) {
       const fallback = TEXT_PROVIDERS[routerDecision.fallbackModel];
       if (fallback) {
-        const fallbackDocs = routerDecision.fallbackModel === 'anthropic' ? pdfDocs : [];
-        response = await fallback.complete(augmentedPrompt, systemPrefix, 512, tier, history, images, fallbackDocs);
+        response = await fallback.complete(augmentedPrompt, systemPrefix, 512, tier, history, images, routerDecision.fallbackModel === 'anthropic' ? pdfDocs : []);
       }
     }
 
-    const result: AppResult = {
-      id,
-      prompt,
-      mode,
-      routerDecision,
-      responses: [response],
-      debateResult: null,
-      finalAnswer: response.content,
-      imageResult: null,
-      timestamp: new Date(),
-      durationMs: Date.now() - start,
-    };
+    return NextResponse.json({ id, prompt, mode, routerDecision, responses: [response], debateResult: null, finalAnswer: response.content, imageResult: null, timestamp: new Date(), durationMs: Date.now() - start } satisfies AppResult);
 
-    return NextResponse.json(result);
   } catch (err) {
     console.error('[/api/chat]', err);
     return NextResponse.json(

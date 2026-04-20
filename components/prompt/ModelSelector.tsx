@@ -160,7 +160,7 @@ export function ModelSelector() {
                   key={mode}
                   onClick={() => toggleModel(mode)}
                   className={cn(
-                    'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-150',
+                    'inline-flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-full text-xs font-medium border transition-all duration-150',
                     isActive
                       ? config.activeColor
                       : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 hover:bg-zinc-800',
@@ -184,7 +184,7 @@ export function ModelSelector() {
                   key={mode}
                   onClick={() => setMode(mode)}
                   className={cn(
-                    'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all duration-150',
+                    'inline-flex items-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-full text-xs font-medium border transition-all duration-150',
                     isActive
                       ? config.activeColor
                       : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 hover:bg-zinc-800',
