@@ -10,6 +10,7 @@ import { OWNER_EMAIL } from '@/lib/stripe';
 export const dynamic = 'force-dynamic';
 
 const FREE_TOKEN_LIMIT = 15000;
+const FREE_DEBATE_LIMIT = 3; // debate is ~40x more expensive than a single prompt
 const MAX_PROMPT_LENGTH = 32000; // ~8K tokens — prevent abuse
 
 const MODE_TO_PROVIDER: Partial<Record<ModelMode, string>> = {
@@ -105,7 +106,7 @@ export async function POST(request: NextRequest) {
       const ip = getIP(request);
       const { data: usage } = await admin
         .from('ip_usage')
-        .select('token_count')
+        .select('token_count, debate_count')
         .eq('ip', ip)
         .single();
 
@@ -154,20 +155,34 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Prompt too long' }, { status: 400 });
     }
 
-    // Increment token count for anonymous users
+    // Anon usage tracking — token count + debate limit
     if (anonIP) {
       const admin = createAdminClient();
-      const tokens = estimateTokens(prompt);
       const { data: current } = await admin
         .from('ip_usage')
-        .select('token_count')
+        .select('token_count, debate_count')
         .eq('ip', anonIP)
         .single();
-      const existing = (current?.token_count as number | null) ?? 0;
-      await admin.from('ip_usage').upsert(
-        { ip: anonIP, token_count: existing + tokens, updated_at: new Date().toISOString() },
-        { onConflict: 'ip' },
-      );
+
+      const existingTokens = (current?.token_count as number | null) ?? 0;
+      const existingDebates = (current?.debate_count as number | null) ?? 0;
+
+      // Debate-specific cap — 3 free debates regardless of token count
+      if (mode === 'debate' && existingDebates >= FREE_DEBATE_LIMIT) {
+        return NextResponse.json(
+          { error: 'Free debate limit reached', code: 'LIMIT_REACHED' },
+          { status: 429 },
+        );
+      }
+
+      const upsertData: Record<string, unknown> = {
+        ip: anonIP,
+        token_count: existingTokens + estimateTokens(prompt),
+        updated_at: new Date().toISOString(),
+      };
+      if (mode === 'debate') upsertData.debate_count = existingDebates + 1;
+
+      await admin.from('ip_usage').upsert(upsertData, { onConflict: 'ip' });
     }
 
     // Inject text document contents into the prompt so all providers benefit
