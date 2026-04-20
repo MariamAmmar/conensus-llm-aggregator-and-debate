@@ -10,9 +10,15 @@ import { OWNER_EMAIL } from '@/lib/stripe';
 export const dynamic = 'force-dynamic';
 
 const FREE_TOKEN_LIMIT = 15000;
-const FREE_DEBATE_LIMIT = 3;       // anon: 3 debates lifetime
-const PAID_DEBATE_MONTHLY_LIMIT = 30; // subscribers: 30 debates per calendar month
-const MAX_PROMPT_LENGTH = 32000; // ~8K tokens — prevent abuse
+const FREE_DEBATE_LIMIT = 3; // anon: 3 debates lifetime
+const MAX_PROMPT_LENGTH = 32000;
+
+// Monthly caps for subscribers — modes that are expensive per call
+const PAID_MONTHLY_LIMITS: Partial<Record<ModelMode, number>> = {
+  debate: 30,  // 8 models + scoring + synthesis ~$0.10–0.20 each
+  all:    50,  // 8 simultaneous calls ~$0.03 each
+  image:  30,  // DALL-E 3 / Imagen ~$0.04 each
+};
 
 const MODE_TO_PROVIDER: Partial<Record<ModelMode, string>> = {
   chatgpt: 'openai', claude: 'anthropic', gemini: 'gemini',
@@ -156,28 +162,30 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Prompt too long' }, { status: 400 });
     }
 
-    // Subscriber monthly debate cap
-    if (!isOwner && userId && mode === 'debate') {
+    // Subscriber monthly caps for expensive modes (debate / all / image)
+    const paidLimit = PAID_MONTHLY_LIMITS[mode];
+    if (!isOwner && userId && paidLimit !== undefined) {
       const admin = createAdminClient();
       const month = new Date().toISOString().slice(0, 7); // "YYYY-MM"
       const { data: usage } = await admin
-        .from('user_debate_usage')
+        .from('user_mode_usage')
         .select('count')
         .eq('user_id', userId)
         .eq('month', month)
+        .eq('mode', mode)
         .single();
 
-      const debateCount = (usage?.count as number | null) ?? 0;
-      if (debateCount >= PAID_DEBATE_MONTHLY_LIMIT) {
+      const currentCount = (usage?.count as number | null) ?? 0;
+      if (currentCount >= paidLimit) {
         return NextResponse.json(
-          { error: 'Monthly debate limit reached', code: 'DEBATE_LIMIT_REACHED' },
+          { error: `Monthly ${mode} limit reached (${paidLimit}/month)`, code: 'MODE_LIMIT_REACHED', limit: paidLimit },
           { status: 429 },
         );
       }
 
-      await admin.from('user_debate_usage').upsert(
-        { user_id: userId, month, count: debateCount + 1 },
-        { onConflict: 'user_id,month' },
+      await admin.from('user_mode_usage').upsert(
+        { user_id: userId, month, mode, count: currentCount + 1 },
+        { onConflict: 'user_id,month,mode' },
       );
     }
 
