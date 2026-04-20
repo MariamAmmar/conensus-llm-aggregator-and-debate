@@ -14,6 +14,7 @@ import { TrialModal } from '@/components/auth/TrialModal';
 import { Sparkles, AlertCircle, CheckCircle } from 'lucide-react';
 import type { HistoryEntry, AppResult, ChatTurn, AttachedImage, AttachedDocument } from '@/types';
 import { generateId } from '@/utils';
+import { formatResponseContent } from '@/components/output/ResponseCard';
 
 const DEBATE_PROMPTS = [
   'Will AI take most jobs in the next 10 years?',
@@ -78,6 +79,7 @@ export default function Home() {
   const [showLoginGate, setShowLoginGate] = useState(false);
   const [showTrialModal, setShowTrialModal] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [streamingContent, setStreamingContent] = useState<Record<string, string>>({});
   // Pick a new funny prompt on each page load (after hydration to avoid SSR mismatch)
   const [rotatingPrompt, setRotatingPrompt] = useState(ROTATING_PROMPTS[0]);
   const [debatePrompts, setDebatePrompts] = useState(() => DEBATE_PROMPTS.slice(0, 4));
@@ -129,10 +131,10 @@ export default function Home() {
 
   function handleStop() {
     abortRef.current?.abort();
-    // Mark the in-progress turn as stopped
     const loadingTurn = chatTurns.findLast((t) => t.loading);
     if (loadingTurn) {
       updateTurn(loadingTurn.id, { loading: false, error: 'Stopped.' });
+      setStreamingContent((prev) => { const next = { ...prev }; delete next[loadingTurn.id]; return next; });
     }
     setLoading(false);
   }
@@ -177,61 +179,83 @@ export default function Home() {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
 
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers,
-          signal: abortRef.current.signal,
-          body: JSON.stringify({
-            prompt: submittedPrompt,
-            mode: selectedMode,
-            imageProvider: selectedImageProvider,
-            history: conversation,
-            providerConversations,
-            debateConversation,
-            images,
-            documents,
-            userMemory: userMemory.map((f) => f.fact),
-            selectedModels,
-          }),
-        });
-        const data = await res.json();
-        if (res.status === 429 && data.code === 'LIMIT_REACHED') {
-          updateTurn(turnId, { loading: false, error: null });
-          setLoading(false);
-          setShowLoginGate(true);
-          return;
-        }
-        if (res.status === 402 && data.code === 'SUBSCRIPTION_REQUIRED') {
-          updateTurn(turnId, { loading: false, error: null });
-          setLoading(false);
-          setShowTrialModal(true);
-          return;
-        }
-        if (!res.ok) throw new Error(data.message || data.error || 'Request failed');
+        // Streaming: single-model and auto modes (not debate/all/image/multi-select)
+        const canStream = selectedMode !== 'debate' && selectedMode !== 'all' && selectedMode !== 'image' && selectedModels.length <= 1;
 
-        const result: AppResult = { ...data, timestamp: new Date(data.timestamp) };
-        updateTurn(turnId, { result, loading: false });
+        if (canStream) {
+          const streamStart = Date.now();
+          const res = await fetch('/api/chat/stream', {
+            method: 'POST', headers, signal: abortRef.current.signal,
+            body: JSON.stringify({ prompt: submittedPrompt, mode: selectedMode, history: conversation, images, userMemory: userMemory.map((f) => f.fact) }),
+          });
 
-        // All modes share the same conversation context
-        if (selectedMode === 'all') {
-          // Use the first successful response as the shared context for all-models mode
-          const firstResponse = result.responses.find((r) => r.content && !r.error);
-          if (firstResponse) addConversationTurn(submittedPrompt, firstResponse.content);
-        } else if (selectedMode !== 'image' && result.finalAnswer) {
-          addConversationTurn(submittedPrompt, result.finalAnswer);
+          // Auth/limit errors arrive as JSON before the stream
+          if (!res.ok) {
+            const data = await res.json();
+            if (res.status === 429 && data.code === 'LIMIT_REACHED') { updateTurn(turnId, { loading: false, error: null }); setLoading(false); setShowLoginGate(true); return; }
+            if (res.status === 402 && data.code === 'SUBSCRIPTION_REQUIRED') { updateTurn(turnId, { loading: false, error: null }); setLoading(false); setShowTrialModal(true); return; }
+            // Image route or other — fall through to main route
+            if (data.error?.toLowerCase().includes('image')) throw new Error('image-fallback');
+            throw new Error(data.message || data.error || 'Request failed');
+          }
+
+          const reader = res.body!.getReader();
+          const decoder = new TextDecoder();
+          let buf = '';
+          let accumulated = '';
+
+          outer: while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            const parts = buf.split('\n\n');
+            buf = parts.pop() ?? '';
+            for (const part of parts) {
+              if (!part.startsWith('data: ')) continue;
+              const msg = JSON.parse(part.slice(6));
+              if (msg.error) throw new Error(msg.error);
+              if (msg.done) {
+                const result: AppResult = {
+                  id: turnId, prompt: submittedPrompt, mode: selectedMode,
+                  routerDecision: msg.routerDecision,
+                  responses: [{ provider: msg.provider, content: accumulated, latencyMs: msg.latencyMs, isGrounded: false }],
+                  debateResult: null, finalAnswer: accumulated, imageResult: null,
+                  timestamp: new Date(), durationMs: Date.now() - streamStart,
+                };
+                updateTurn(turnId, { result, loading: false });
+                setStreamingContent((prev) => { const next = { ...prev }; delete next[turnId]; return next; });
+                addConversationTurn(submittedPrompt, accumulated);
+                addHistoryEntry({ id: turnId, prompt: submittedPrompt, mode: selectedMode, finalAnswer: accumulated, timestamp: new Date(), routerCategory: msg.routerDecision?.category, selectedProvider: msg.provider });
+                break outer;
+              } else if (msg.t) {
+                accumulated += msg.t;
+                setStreamingContent((prev) => ({ ...prev, [turnId]: accumulated }));
+              }
+            }
+          }
+        } else {
+          // Non-streaming: debate, all-models, image, multi-select
+          const res = await fetch('/api/chat', {
+            method: 'POST', headers, signal: abortRef.current.signal,
+            body: JSON.stringify({ prompt: submittedPrompt, mode: selectedMode, imageProvider: selectedImageProvider, history: conversation, providerConversations, debateConversation, images, documents, userMemory: userMemory.map((f) => f.fact), selectedModels }),
+          });
+          const data = await res.json();
+          if (res.status === 429 && data.code === 'LIMIT_REACHED') { updateTurn(turnId, { loading: false, error: null }); setLoading(false); setShowLoginGate(true); return; }
+          if (res.status === 402 && data.code === 'SUBSCRIPTION_REQUIRED') { updateTurn(turnId, { loading: false, error: null }); setLoading(false); setShowTrialModal(true); return; }
+          if (!res.ok) throw new Error(data.message || data.error || 'Request failed');
+
+          const result: AppResult = { ...data, timestamp: new Date(data.timestamp) };
+          updateTurn(turnId, { result, loading: false });
+
+          if (selectedMode === 'all') {
+            const firstResponse = result.responses.find((r) => r.content && !r.error);
+            if (firstResponse) addConversationTurn(submittedPrompt, firstResponse.content);
+          } else if (selectedMode !== 'image' && result.finalAnswer) {
+            addConversationTurn(submittedPrompt, result.finalAnswer);
+          }
+
+          addHistoryEntry({ id: result.id, prompt: submittedPrompt, mode: selectedMode, finalAnswer: result.finalAnswer, imageUrl: result.imageResult?.url, timestamp: result.timestamp, routerCategory: result.routerDecision?.category, selectedProvider: result.routerDecision?.selectedModel });
         }
-
-        const historyEntry: HistoryEntry = {
-          id: result.id,
-          prompt: submittedPrompt,
-          mode: selectedMode,
-          finalAnswer: result.finalAnswer,
-          imageUrl: result.imageResult?.url,
-          timestamp: result.timestamp,
-          routerCategory: result.routerDecision?.category,
-          selectedProvider: result.routerDecision?.selectedModel,
-        };
-        addHistoryEntry(historyEntry);
       }
     } catch (err) {
       if ((err as Error).name === 'AbortError') return;
@@ -375,19 +399,25 @@ export default function Home() {
 
                     {/* Loading */}
                     {turn.loading && (
-                      <div className="flex items-center gap-3 py-2">
-                        <div className="relative w-8 h-8 shrink-0">
-                          <div className="absolute inset-0 rounded-full border-2 border-zinc-700" />
-                          <div className="absolute inset-0 rounded-full border-2 border-t-indigo-500 animate-spin" />
+                      streamingContent[turn.id] ? (
+                        <div className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap break-words response-content">
+                          <div dangerouslySetInnerHTML={{ __html: formatResponseContent(streamingContent[turn.id]) }} />
+                          <span className="inline-block w-0.5 h-4 bg-indigo-400 animate-pulse ml-0.5 -mb-0.5" />
                         </div>
-                        <p className="text-zinc-400 text-sm">
-                          {turn.mode === 'debate' ? 'Running debate across all models...'
-                            : turn.mode === 'auto' ? 'Routing to best model...'
-                            : turn.mode === 'image' ? 'Generating image...'
-                            : turn.mode === 'all' ? 'Querying all models...'
-                            : 'Thinking...'}
-                        </p>
-                      </div>
+                      ) : (
+                        <div className="flex items-center gap-3 py-2">
+                          <div className="relative w-8 h-8 shrink-0">
+                            <div className="absolute inset-0 rounded-full border-2 border-zinc-700" />
+                            <div className="absolute inset-0 rounded-full border-2 border-t-indigo-500 animate-spin" />
+                          </div>
+                          <p className="text-zinc-400 text-sm">
+                            {turn.mode === 'debate' ? 'Running debate across all models...'
+                              : turn.mode === 'image' ? 'Generating image...'
+                              : turn.mode === 'all' ? 'Querying all models...'
+                              : 'Thinking...'}
+                          </p>
+                        </div>
+                      )
                     )}
 
                     {/* Error */}

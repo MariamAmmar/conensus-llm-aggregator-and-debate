@@ -180,6 +180,15 @@ export function ResponseCard({ response, isLoading, onVote, voted, collapsible }
 // Simple markdown-like formatting for bold text and lists
 export function formatResponseContent(content: string): string {
   return content
+    // Fenced code blocks — handle before bold/italic to avoid conflicts
+    .replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code) => {
+      const escaped = code.trimEnd()
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return `<pre class="my-3 p-3 rounded-lg bg-zinc-950 border border-zinc-800 overflow-x-auto text-xs font-mono text-zinc-300 leading-relaxed" style="white-space:pre">${escaped}</pre>`;
+    })
+    // Inline code
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+    // Headings
     .replace(/^### (.+)$/gm, '<span class="block text-base font-semibold text-zinc-100 mt-4 mb-1">$1</span>')
     .replace(/^## (.+)$/gm, '<span class="block text-lg font-semibold text-zinc-100 mt-4 mb-1">$1</span>')
     .replace(/^# (.+)$/gm, '<span class="block text-xl font-bold text-zinc-100 mt-4 mb-1">$1</span>')

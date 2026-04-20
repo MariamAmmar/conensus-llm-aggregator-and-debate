@@ -48,7 +48,7 @@ export function OutputPanel({ result }: OutputPanelProps) {
 
       {/* Debate mode */}
       {result.mode === 'debate' && result.debateResult && (
-        <DebatePanel debateResult={result.debateResult} prompt={result.prompt} />
+        <DebatePanel debateResult={result.debateResult} prompt={result.prompt} result={result} />
       )}
 
       {/* All models side-by-side with voting */}

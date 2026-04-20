@@ -1,17 +1,18 @@
 'use client';
 
 import { useState } from 'react';
-import { Trophy, Info, X, ChevronDown, ChevronUp } from 'lucide-react';
+import { Trophy, Info, X, ChevronDown, ChevronUp, Share2, Check } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ResponseCard, formatResponseContent } from '@/components/output/ResponseCard';
-import type { DebateResult, ProviderId } from '@/types';
+import type { AppResult, DebateResult, ProviderId } from '@/types';
 import { getProviderLabel } from '@/utils';
 import { cn } from '@/lib/utils';
 
 interface DebatePanelProps {
   debateResult: DebateResult;
   prompt: string;
+  result?: AppResult;
 }
 
 const SCORE_DIMENSIONS = [
@@ -36,10 +37,31 @@ const WINNER_COLORS: Record<ProviderId, string> = {
   'gemini-image': 'text-blue-400',
 };
 
-export function DebatePanel({ debateResult }: DebatePanelProps) {
+export function DebatePanel({ debateResult, result }: DebatePanelProps) {
   const [showInfo, setShowInfo] = useState(false);
   const [showComparison, setShowComparison] = useState(false);
+  const [shareState, setShareState] = useState<'idle' | 'loading' | 'copied'>('idle');
   const { responses, scores, winner, synthesizedAnswer, synthesisReasoning } = debateResult;
+
+  async function handleShare() {
+    if (!result || shareState !== 'idle') return;
+    setShareState('loading');
+    try {
+      const res = await fetch('/api/share', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ result }),
+      });
+      const data = await res.json();
+      if (!data.id) throw new Error('No ID returned');
+      const url = `${window.location.origin}/share/${data.id}`;
+      await navigator.clipboard.writeText(url);
+      setShareState('copied');
+      setTimeout(() => setShareState('idle'), 3000);
+    } catch {
+      setShareState('idle');
+    }
+  }
 
   const winnerScore = scores.find((s) => s.provider === winner);
   const validResponses = responses.filter((r) => !r.error && r.content.trim());
@@ -74,6 +96,23 @@ export function DebatePanel({ debateResult }: DebatePanelProps) {
                 <span className={WINNER_COLORS[winner]}>{getProviderLabel(winner)}</span>
                 <span className="ml-1 text-amber-300">· {winnerScore?.totalScore.toFixed(2)}</span>
               </Badge>
+              {result && (
+                <button
+                  onClick={handleShare}
+                  disabled={shareState === 'loading'}
+                  className={cn(
+                    'inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium border transition-all',
+                    shareState === 'copied'
+                      ? 'border-emerald-500/50 bg-emerald-500/10 text-emerald-400'
+                      : 'border-zinc-700 bg-zinc-800 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600',
+                  )}
+                  title="Copy shareable link"
+                >
+                  {shareState === 'copied'
+                    ? <><Check className="w-3 h-3" /> Copied!</>
+                    : <><Share2 className="w-3 h-3" /> Share</>}
+                </button>
+              )}
             </div>
           </div>
 
