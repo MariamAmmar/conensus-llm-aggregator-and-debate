@@ -15,6 +15,21 @@ import { Sparkles, AlertCircle, CheckCircle } from 'lucide-react';
 import type { HistoryEntry, AppResult, ChatTurn, AttachedImage, AttachedDocument } from '@/types';
 import { generateId } from '@/utils';
 
+const DEBATE_PROMPTS = [
+  'Will AI take most jobs in the next 10 years?',
+  'Is nuclear power the best solution to climate change?',
+  'Should social media be banned for under-16s?',
+  'Is crypto a legitimate currency or an elaborate scam?',
+  'Will AGI be built within the next 5 years?',
+  'Does remote work hurt or help productivity?',
+  'Is universal basic income a good idea?',
+  'Should there be a global body regulating AI?',
+  'Is capitalism the best economic system humanity has found?',
+  'Will humans live on Mars within 30 years?',
+  'Does social media do more harm than good to society?',
+  'Is it ethical to eat meat in 2025?',
+];
+
 const ROTATING_PROMPTS = [
   'Write a passive-aggressive note from my phone battery to me',
   'Explain blockchain to a golden retriever',
@@ -65,8 +80,11 @@ export default function Home() {
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   // Pick a new funny prompt on each page load (after hydration to avoid SSR mismatch)
   const [rotatingPrompt, setRotatingPrompt] = useState(ROTATING_PROMPTS[0]);
+  const [debatePrompts, setDebatePrompts] = useState(() => DEBATE_PROMPTS.slice(0, 4));
   useEffect(() => {
     setRotatingPrompt(ROTATING_PROMPTS[Math.floor(Math.random() * ROTATING_PROMPTS.length)]);
+    const shuffled = [...DEBATE_PROMPTS].sort(() => Math.random() - 0.5);
+    setDebatePrompts(shuffled.slice(0, 4));
   }, []);
 
   // Sync sessions on load and whenever auth state changes (login/logout)
@@ -292,22 +310,39 @@ export default function Home() {
               <ModelSelector />
               <PromptInput onSubmit={handleSubmit} onStop={handleStop} />
 
-              <div className="flex flex-wrap gap-2 justify-center">
-                {[
-                  'What can you do?',
-                  'Who is Mariam?',
-                  'What are the latest AI developments?',
-                  rotatingPrompt,
-                ].map((example) => (
-                  <button
-                    key={example}
-                    onClick={() => setPrompt(example)}
-                    className="px-3 py-1.5 text-sm rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors"
-                  >
-                    {example}
-                  </button>
-                ))}
-              </div>
+              {selectedMode === 'debate' ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-center text-pink-400/70 font-medium uppercase tracking-wide">Try a question the models might disagree on</p>
+                  <div className="flex flex-wrap gap-2 justify-center">
+                    {debatePrompts.map((example) => (
+                      <button
+                        key={example}
+                        onClick={() => setPrompt(example)}
+                        className="px-3 py-1.5 text-sm rounded-full bg-pink-500/10 border border-pink-500/20 text-pink-300/80 hover:text-pink-200 hover:border-pink-500/40 transition-colors"
+                      >
+                        {example}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-wrap gap-2 justify-center">
+                  {[
+                    'What can you do?',
+                    'Who is Mariam?',
+                    'What are the latest AI developments?',
+                    rotatingPrompt,
+                  ].map((example) => (
+                    <button
+                      key={example}
+                      onClick={() => setPrompt(example)}
+                      className="px-3 py-1.5 text-sm rounded-full bg-zinc-800 border border-zinc-700 text-zinc-400 hover:text-zinc-200 hover:border-zinc-600 transition-colors"
+                    >
+                      {example}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         ) : (
