@@ -178,9 +178,13 @@ export function ResponseCard({ response, isLoading, onVote, voted, collapsible }
 }
 
 // Simple markdown-like formatting for bold text and lists
-function formatResponseContent(content: string): string {
+export function formatResponseContent(content: string): string {
   return content
+    .replace(/^### (.+)$/gm, '<span class="block text-base font-semibold text-zinc-100 mt-4 mb-1">$1</span>')
+    .replace(/^## (.+)$/gm, '<span class="block text-lg font-semibold text-zinc-100 mt-4 mb-1">$1</span>')
+    .replace(/^# (.+)$/gm, '<span class="block text-xl font-bold text-zinc-100 mt-4 mb-1">$1</span>')
     .replace(/\*\*(.*?)\*\*/g, '<strong class="text-zinc-100 font-semibold">$1</strong>')
+    .replace(/\*(.*?)\*/g, '<em class="text-zinc-200 italic">$1</em>')
     .replace(/^(\d+)\. /gm, '<span class="text-zinc-400">$1.</span> ')
     .replace(/^- /gm, '<span class="text-zinc-500">•</span> ');
 }
