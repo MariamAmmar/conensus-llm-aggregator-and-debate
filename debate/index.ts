@@ -238,7 +238,8 @@ async function synthesize(
     .filter((r) => !r.error && r.content.trim().length > 0)
     .map((r) => {
       const score = scores.find((s) => s.provider === r.provider);
-      return `[${r.provider} — score: ${score?.totalScore.toFixed(2) ?? 'n/a'}]\n${r.content}`;
+      const truncated = r.content.length > 800 ? r.content.slice(0, 800).trimEnd() + '…' : r.content;
+      return `[${r.provider} — score: ${score?.totalScore.toFixed(2) ?? 'n/a'}]\n${truncated}`;
     })
     .join('\n\n---\n\n');
 
