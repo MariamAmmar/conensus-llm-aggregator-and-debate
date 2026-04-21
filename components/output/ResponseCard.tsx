@@ -213,14 +213,12 @@ export function formatResponseContent(content: string, citations?: string[]): st
     // Markdown links [text](url)
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-indigo-400 underline underline-offset-2 hover:text-indigo-300">$1</a>');
 
-  // Replace Perplexity-style [1] [2] citations with linked superscripts
-  if (citations && citations.length > 0) {
-    out = out.replace(/\[(\d+)\]/g, (match, n) => {
-      const url = citations[parseInt(n, 10) - 1];
-      if (!url) return match;
-      return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold rounded bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/40 hover:text-indigo-300 transition-colors ml-0.5 no-underline">${n}</a>`;
-    });
-  }
+  // Replace [1][2] citations — link if Perplexity provided URLs, strip otherwise
+  out = out.replace(/\[(\d+)\]/g, (match, n) => {
+    const url = citations?.[parseInt(n, 10) - 1];
+    if (!url) return '';
+    return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold rounded bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/40 hover:text-indigo-300 transition-colors ml-0.5 no-underline">${n}</a>`;
+  });
 
   return out;
 }
