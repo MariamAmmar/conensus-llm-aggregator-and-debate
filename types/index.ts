@@ -32,6 +32,7 @@ export interface ModelResponse {
   content: string;
   latencyMs: number;
   isGrounded: boolean;
+  citations?: string[];
   error?: string;
 }
 

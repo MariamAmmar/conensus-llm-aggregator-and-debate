@@ -150,7 +150,7 @@ export function ResponseCard({ response, isLoading, onVote, voted, collapsible }
       <CardContent className="pt-0 space-y-3">
         <div
           className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap break-words overflow-hidden response-content"
-          dangerouslySetInnerHTML={{ __html: formatResponseContent(displayContent) }}
+          dangerouslySetInnerHTML={{ __html: formatResponseContent(displayContent, response.citations) }}
         />
         {isTruncated && (
           <button
@@ -192,8 +192,8 @@ export function ResponseCard({ response, isLoading, onVote, voted, collapsible }
 }
 
 // Simple markdown-like formatting for bold text and lists
-export function formatResponseContent(content: string): string {
-  return content
+export function formatResponseContent(content: string, citations?: string[]): string {
+  let out = content
     // Fenced code blocks — handle before bold/italic to avoid conflicts
     .replace(/```[\w]*\n?([\s\S]*?)```/g, (_, code) => {
       const escaped = code.trimEnd()
@@ -209,5 +209,18 @@ export function formatResponseContent(content: string): string {
     .replace(/\*\*(.*?)\*\*/g, '<strong class="text-zinc-100 font-semibold">$1</strong>')
     .replace(/\*(.*?)\*/g, '<em class="text-zinc-200 italic">$1</em>')
     .replace(/^(\d+)\. /gm, '<span class="text-zinc-400">$1.</span> ')
-    .replace(/^- /gm, '<span class="text-zinc-500">•</span> ');
+    .replace(/^- /gm, '<span class="text-zinc-500">•</span> ')
+    // Markdown links [text](url)
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer" class="text-indigo-400 underline underline-offset-2 hover:text-indigo-300">$1</a>');
+
+  // Replace Perplexity-style [1] [2] citations with linked superscripts
+  if (citations && citations.length > 0) {
+    out = out.replace(/\[(\d+)\]/g, (match, n) => {
+      const url = citations[parseInt(n, 10) - 1];
+      if (!url) return match;
+      return `<a href="${url}" target="_blank" rel="noopener noreferrer" class="inline-flex items-center justify-center w-4 h-4 text-[10px] font-bold rounded bg-indigo-500/20 text-indigo-400 hover:bg-indigo-500/40 hover:text-indigo-300 transition-colors ml-0.5 no-underline">${n}</a>`;
+    });
+  }
+
+  return out;
 }

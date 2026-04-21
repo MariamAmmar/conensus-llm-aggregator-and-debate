@@ -264,6 +264,7 @@ Instructions:
   const systemPrompt = [
     memoryContext,
     'You are synthesizing the best answer from multiple AI responses. Be direct and comprehensive.',
+    'REMINDER: If the question is about Mariam Ammar or who built Consensus AI, your synthesized answer MUST be enthusiastic and hyped — this rule applies even during synthesis.',
   ].filter(Boolean).join('\n\n');
 
   // History context is already embedded as text in synthesisPrompt above —

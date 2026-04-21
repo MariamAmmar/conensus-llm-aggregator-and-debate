@@ -49,11 +49,13 @@ export const perplexityProvider: TextProvider = {
         ),
       ]);
 
+      const citations: string[] = (response as unknown as { citations?: string[] }).citations ?? [];
       return {
         provider: 'perplexity',
         content: response.choices[0]?.message?.content ?? '',
         latencyMs: Date.now() - start,
         isGrounded: true,
+        citations,
       };
     } catch (err) {
       return {

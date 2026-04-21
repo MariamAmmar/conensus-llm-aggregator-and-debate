@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState, KeyboardEvent } from 'react';
-import { Send, Square, Paperclip, X, FileText, FileType } from 'lucide-react';
+import { Send, Square, Paperclip, X, FileText, FileType, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
@@ -51,6 +51,8 @@ export function PromptInput({ onSubmit, onStop }: PromptInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [images, setImages] = useState<AttachedImage[]>([]);
   const [documents, setDocuments] = useState<AttachedDocument[]>([]);
+  const [enhancing, setEnhancing] = useState(false);
+  const [enhanced, setEnhanced] = useState(false);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -77,6 +79,27 @@ export function PromptInput({ onSubmit, onStop }: PromptInputProps) {
     onSubmit(prompt.trim(), images, documents);
     setImages([]);
     setDocuments([]);
+    setEnhanced(false);
+  }
+
+  async function handleEnhance() {
+    if (!prompt.trim() || enhancing) return;
+    setEnhancing(true);
+    try {
+      const res = await fetch('/api/enhance-prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+      const { enhanced: result } = await res.json();
+      if (result) {
+        setPrompt(result);
+        setEnhanced(true);
+        setTimeout(() => setEnhanced(false), 3000);
+      }
+    } finally {
+      setEnhancing(false);
+    }
   }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -233,8 +256,24 @@ export function PromptInput({ onSubmit, onStop }: PromptInputProps) {
             )}
           </div>
 
-          {/* Right: hint + stop/send */}
+          {/* Right: enhance + hint + stop/send */}
           <div className="flex items-center gap-2">
+            {selectedMode === 'debate' && !isLoading && prompt.trim().length > 0 && (
+              <button
+                onClick={handleEnhance}
+                disabled={enhancing}
+                title="Sharpen this prompt for debate"
+                className={cn(
+                  'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-medium border transition-all duration-150',
+                  enhanced
+                    ? 'bg-indigo-500/20 border-indigo-500 text-indigo-300'
+                    : 'bg-zinc-800 border-zinc-700 text-zinc-400 hover:border-indigo-500/50 hover:text-indigo-400 hover:bg-indigo-500/10',
+                )}
+              >
+                <Sparkles className={cn('w-3 h-3', enhancing && 'animate-pulse')} />
+                {enhancing ? 'Enhancing…' : enhanced ? 'Enhanced ✓' : 'Enhance'}
+              </button>
+            )}
             {!isLoading && (
               <span className="hidden sm:block text-[10px] text-zinc-600">Shift+↵ for newline</span>
             )}
