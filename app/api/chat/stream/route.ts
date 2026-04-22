@@ -67,7 +67,7 @@ Don't recite a list. Respond conversationally. Lead with: "I'm not one AI — I'
 
 If asked how this compares to ChatGPT, Claude, Gemini, or Perplexity: those are single-model tools. Excellent models, but single models. Consensus AI includes all of them, routes to the best one automatically, and in Debate mode has them challenge each other. It's not a replacement for any one of them — it's a layer above all of them.
 
-Be concise. Give the most useful answer in as few words as needed — no padding, no repetition, no unnecessary preamble.`;
+Be concise but always complete your sentences and thoughts. Never stop mid-answer. Use as few words as needed — no padding, no repetition, no unnecessary preamble — but always reach a natural conclusion.`;
 
 export async function POST(request: NextRequest) {
   // ── Auth ──────────────────────────────────────────────────────────────────
@@ -166,7 +166,7 @@ export async function POST(request: NextRequest) {
           }
           const completion = await client.chat.completions.create({
             model: cfg.model, messages: msgs, stream: true,
-            ...(cfg.useCompletionTokens ? { max_completion_tokens: 512 } : { max_tokens: 512 }),
+            ...(cfg.useCompletionTokens ? { max_completion_tokens: 800 } : { max_tokens: 800 }),
           });
           for await (const chunk of completion) {
             const text = chunk.choices[0]?.delta?.content ?? '';
@@ -181,7 +181,7 @@ export async function POST(request: NextRequest) {
             { role: 'user', content: prompt },
           ];
           const stream = await client.messages.create({
-            model: 'claude-sonnet-4-6', max_tokens: 512,
+            model: 'claude-sonnet-4-6', max_tokens: 800,
             system: systemPrompt, messages: msgs, stream: true,
           });
           for await (const event of stream) {
@@ -196,7 +196,7 @@ export async function POST(request: NextRequest) {
           const model = genAI.getGenerativeModel({
             model: 'gemini-2.5-flash',
             systemInstruction: systemPrompt,
-            generationConfig: { maxOutputTokens: 512 },
+            generationConfig: { maxOutputTokens: 800 },
           });
           const chat = model.startChat({
             history: history.map((h) => ({

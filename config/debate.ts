@@ -4,7 +4,7 @@ export const DEBATE_CONFIG = {
   participants: ['openai', 'anthropic', 'gemini', 'perplexity', 'grok', 'llama', 'o4mini', 'deepseek'] as const,
 
   // Max tokens per response
-  maxResponseTokens: 512,
+  maxResponseTokens: 800,
 
   // Max tokens per critique
   maxCritiqueTokens: 512,
@@ -22,5 +22,5 @@ export const DEBATE_CONFIG = {
   synthesisModel: 'anthropic' as const,
 
   // Max tokens for synthesis
-  maxSynthesisTokens: 1024,
+  maxSynthesisTokens: 1200,
 };

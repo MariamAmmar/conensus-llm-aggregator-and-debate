@@ -74,7 +74,7 @@ Don't recite a list. Respond conversationally. Lead with: "I'm not one AI — I'
 
 If asked how this compares to ChatGPT, Claude, Gemini, or Perplexity: those are single-model tools. Excellent models, but single models. Consensus AI includes all of them, routes to the best one automatically, and in Debate mode has them challenge each other. It's not a replacement for any one of them — it's a layer above all of them.
 
-Be concise. Give the most useful answer in as few words as needed — no padding, no repetition, no unnecessary preamble.`;
+Be concise but always complete your sentences and thoughts. Never stop mid-answer. Use as few words as needed — no padding, no repetition, no unnecessary preamble — but always reach a natural conclusion.`;
 
 export async function POST(request: NextRequest) {
   const start = Date.now();
@@ -266,7 +266,7 @@ export async function POST(request: NextRequest) {
         providerIds.map(async (pid) => {
           const provider = TEXT_PROVIDERS[pid as ProviderId];
           if (!provider) return null;
-          return provider.complete(augmentedPrompt, systemPrefix, 512, 'standard', history, images, pid === 'anthropic' ? pdfDocs : []);
+          return provider.complete(augmentedPrompt, systemPrefix, 800, 'standard', history, images, pid === 'anthropic' ? pdfDocs : []);
         }),
       );
       return NextResponse.json({ id, prompt, mode: 'all', routerDecision: null, responses: responses.filter(Boolean) as ModelResponse[], debateResult: null, finalAnswer: '', imageResult: null, timestamp: new Date(), durationMs: Date.now() - start } satisfies AppResult);
@@ -279,7 +279,7 @@ export async function POST(request: NextRequest) {
         allProviders.map(async (pid) => {
           const provider = TEXT_PROVIDERS[pid];
           if (!provider) return null;
-          return provider.complete(augmentedPrompt, systemPrefix, 512, 'standard', history, images, pid === 'anthropic' ? pdfDocs : []);
+          return provider.complete(augmentedPrompt, systemPrefix, 800, 'standard', history, images, pid === 'anthropic' ? pdfDocs : []);
         }),
       );
       return NextResponse.json({ id, prompt, mode, routerDecision: null, responses: responses.filter(Boolean) as ModelResponse[], debateResult: null, finalAnswer: '', imageResult: null, timestamp: new Date(), durationMs: Date.now() - start } satisfies AppResult);
@@ -317,13 +317,13 @@ export async function POST(request: NextRequest) {
     }
 
     const tier: ComputeTier = (routerDecision as { computeTier?: ComputeTier }).computeTier ?? 'standard';
-    let response = await provider.complete(augmentedPrompt, systemPrefix, 512, tier, history, images, providerId === 'anthropic' ? pdfDocs : []);
+    let response = await provider.complete(augmentedPrompt, systemPrefix, 800, tier, history, images, providerId === 'anthropic' ? pdfDocs : []);
 
     // Fallback if primary provider errored
     if (response.error && routerDecision.fallbackModel) {
       const fallback = TEXT_PROVIDERS[routerDecision.fallbackModel];
       if (fallback) {
-        response = await fallback.complete(augmentedPrompt, systemPrefix, 512, tier, history, images, routerDecision.fallbackModel === 'anthropic' ? pdfDocs : []);
+        response = await fallback.complete(augmentedPrompt, systemPrefix, 800, tier, history, images, routerDecision.fallbackModel === 'anthropic' ? pdfDocs : []);
       }
     }
 
