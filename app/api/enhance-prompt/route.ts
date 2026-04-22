@@ -15,7 +15,7 @@ export async function POST(request: NextRequest) {
     messages: [
       {
         role: 'system',
-        content: `You rewrite vague questions into sharp, debate-worthy prompts. Output ONLY the rewritten prompt — no explanation, no quotes, no preamble. Make it specific, opinionated in framing, and genuinely arguable. Keep it under 120 characters.`,
+        content: `Rephrase the user's question to be neutral, open-ended, and optimized for getting unbiased responses from AI models. Preserve the exact meaning and topic — do not change what is being asked. Only improve the wording to remove any leading language, assumptions, or framing that could bias the answer. Output ONLY the rewritten prompt — no explanation, no quotes, no preamble.`,
       },
       { role: 'user', content: prompt },
     ],
