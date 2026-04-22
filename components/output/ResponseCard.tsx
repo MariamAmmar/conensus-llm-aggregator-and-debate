@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import type { ModelResponse, ProviderId } from '@/types';
 import { getProviderLabel } from '@/utils';
 import { cn } from '@/lib/utils';
+import { MarkdownContent } from './MarkdownContent';
 
 const PROVIDER_ACCENT: Record<ProviderId, string> = {
   openai: 'border-l-emerald-500',
@@ -148,10 +149,7 @@ export function ResponseCard({ response, isLoading, onVote, voted, collapsible }
         </div>
       </CardHeader>
       <CardContent className="pt-0 space-y-3">
-        <div
-          className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap break-words overflow-hidden response-content"
-          dangerouslySetInnerHTML={{ __html: formatResponseContent(displayContent, response.citations) }}
-        />
+        <MarkdownContent content={displayContent} citations={response.citations} />
         {isTruncated && (
           <button
             onClick={() => setExpanded(!expanded)}

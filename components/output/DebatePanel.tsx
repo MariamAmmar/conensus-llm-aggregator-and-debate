@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { Trophy, Info, X, ChevronDown, ChevronUp, Share2, Check } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { ResponseCard, formatResponseContent } from '@/components/output/ResponseCard';
+import { ResponseCard } from '@/components/output/ResponseCard';
+import { MarkdownContent } from '@/components/output/MarkdownContent';
 import type { AppResult, DebateResult, ProviderId } from '@/types';
 import { getProviderLabel } from '@/utils';
 import { cn } from '@/lib/utils';
@@ -140,10 +141,7 @@ export function DebatePanel({ debateResult, result }: DebatePanelProps) {
           )}
         </CardHeader>
         <CardContent className="space-y-4">
-          <div
-            className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap break-words overflow-hidden response-content"
-            dangerouslySetInnerHTML={{ __html: formatResponseContent(synthesizedAnswer) }}
-          />
+          <MarkdownContent content={synthesizedAnswer} />
 
           {/* Toggle to see model comparison */}
           <button

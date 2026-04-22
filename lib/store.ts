@@ -154,9 +154,13 @@ export const useAppStore = create<AppStore>()(
       const authHeader = await getAuthHeader();
       const res = await fetch('/api/sessions', { headers: authHeader });
       if (!res.ok) return;
-      const sessions: ChatSession[] = await res.json();
-      // DB sessions replace localStorage — user's canonical source of truth
-      set(() => ({ sessions: sessions.slice(0, 50) }));
+      const dbSessions: ChatSession[] = await res.json();
+      // Merge: keep local sessions not yet in DB (e.g. anon turns before login)
+      set((state) => {
+        const dbIds = new Set(dbSessions.map((s) => s.id));
+        const localOnly = state.sessions.filter((s) => !dbIds.has(s.id));
+        return { sessions: [...dbSessions, ...localOnly].slice(0, 50) };
+      });
     } catch {
       // Network failure — fall back to localStorage silently
     }
@@ -173,13 +177,31 @@ export const useAppStore = create<AppStore>()(
     }),
 
   addConversationTurn: (userPrompt, assistantResponse) =>
-    set((state) => ({
-      conversation: [
+    set((state) => {
+      const updated = [
         ...state.conversation,
         { role: 'user' as const, content: userPrompt },
         { role: 'assistant' as const, content: assistantResponse },
-      ].slice(-20),
-    })),
+      ];
+      // Summarize when history exceeds 10 messages (5 turns) to keep tokens low
+      if (updated.length >= 10) {
+        fetch('/api/summarize-history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ history: updated }),
+        })
+          .then((r) => r.json())
+          .then(({ summary }) => {
+            if (summary) {
+              useAppStore.setState({
+                conversation: [{ role: 'assistant' as const, content: `[Conversation summary]: ${summary}` }],
+              });
+            }
+          })
+          .catch(() => {});
+      }
+      return { conversation: updated.slice(-20) };
+    }),
   clearConversation: () => set({ conversation: [] }),
 
   addProviderTurn: (provider, userPrompt, assistantResponse) =>

@@ -14,9 +14,9 @@ import { TrialModal } from '@/components/auth/TrialModal';
 import { Sparkles, AlertCircle, CheckCircle, RotateCcw } from 'lucide-react';
 import type { HistoryEntry, AppResult, ChatTurn, AttachedImage, AttachedDocument } from '@/types';
 import { generateId } from '@/utils';
-import { formatResponseContent } from '@/components/output/ResponseCard';
 import { DebateProgress } from '@/components/output/DebateProgress';
 import { FollowUpQuestions } from '@/components/output/FollowUpQuestions';
+import { MarkdownContent } from '@/components/output/MarkdownContent';
 
 const DEBATE_PROMPTS = [
   'Will AI take most jobs in the next 10 years?',
@@ -458,7 +458,7 @@ export default function Home() {
                     {turn.loading && !scrapingUrls && (
                       streamingContent[turn.id] ? (
                         <div className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap break-words response-content">
-                          <div dangerouslySetInnerHTML={{ __html: formatResponseContent(streamingContent[turn.id]) }} />
+                          <MarkdownContent content={streamingContent[turn.id]} />
                           <span className="inline-block w-0.5 h-4 bg-indigo-400 animate-pulse ml-0.5 -mb-0.5" />
                         </div>
                       ) : turn.mode === 'debate' ? (

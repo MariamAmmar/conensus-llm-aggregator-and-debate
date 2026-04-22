@@ -321,8 +321,9 @@ export async function POST(request: NextRequest) {
     const tier: ComputeTier = (routerDecision as { computeTier?: ComputeTier }).computeTier ?? 'standard';
     let response = await provider.complete(augmentedPrompt, systemPrefix, 800, tier, history, images, providerId === 'anthropic' ? pdfDocs : []);
 
-    // Fallback if primary provider errored
-    if (response.error && routerDecision.fallbackModel) {
+    // Smart retry: fallback if errored OR response is suspiciously short
+    const isTooShort = !response.error && response.content.trim().length < 40;
+    if ((response.error || isTooShort) && routerDecision.fallbackModel) {
       const fallbackId = routerDecision.fallbackModel as ProviderId;
       const fallback = TEXT_PROVIDERS[fallbackId];
       if (fallback) {
