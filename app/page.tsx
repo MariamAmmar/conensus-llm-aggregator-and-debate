@@ -84,6 +84,7 @@ export default function Home() {
   const [showTrialModal, setShowTrialModal] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [streamingContent, setStreamingContent] = useState<Record<string, string>>({});
+  const [scrapingUrls, setScrapingUrls] = useState(false);
   // Pick a new funny prompt on each page load (after hydration to avoid SSR mismatch)
   const [rotatingPrompt, setRotatingPrompt] = useState(ROTATING_PROMPTS[0]);
   const [debatePrompts, setDebatePrompts] = useState(() => DEBATE_PROMPTS.slice(0, 4));
@@ -168,6 +169,24 @@ export default function Home() {
 
   async function handleSubmit(submittedPrompt: string, images: AttachedImage[], documents: AttachedDocument[]) {
     if (!submittedPrompt.trim() || isLoading) return;
+
+    // Detect URLs and scrape them before sending
+    const urlMatches = submittedPrompt.match(/https?:\/\/[^\s)>\]"']+/g) ?? [];
+    if (urlMatches.length > 0) {
+      setScrapingUrls(true);
+      const scraped = await Promise.all(
+        urlMatches.slice(0, 3).map((url) =>
+          fetch('/api/scrape', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) })
+            .then((r) => r.json()).catch(() => null),
+        ),
+      );
+      setScrapingUrls(false);
+      const context = scraped
+        .filter((s) => s?.content)
+        .map((s) => `<webpage url="${s.url}">\n${s.content}\n</webpage>`)
+        .join('\n\n');
+      if (context) submittedPrompt = `${context}\n\n${submittedPrompt}`;
+    }
 
     const turnId = generateId();
     const newTurn: ChatTurn = {
@@ -427,8 +446,16 @@ export default function Home() {
                       </div>
                     </div>
 
+                    {/* URL scraping indicator */}
+                    {scrapingUrls && turn.loading && (
+                      <div className="flex items-center gap-2 text-xs text-zinc-500 py-1">
+                        <div className="w-3 h-3 border border-indigo-500 border-t-transparent rounded-full animate-spin" />
+                        Reading linked page…
+                      </div>
+                    )}
+
                     {/* Loading */}
-                    {turn.loading && (
+                    {turn.loading && !scrapingUrls && (
                       streamingContent[turn.id] ? (
                         <div className="text-sm text-zinc-300 leading-relaxed whitespace-pre-wrap break-words response-content">
                           <div dangerouslySetInnerHTML={{ __html: formatResponseContent(streamingContent[turn.id]) }} />
