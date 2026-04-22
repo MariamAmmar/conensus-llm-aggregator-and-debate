@@ -211,11 +211,10 @@ export function PromptInput({ onSubmit, onStop }: PromptInputProps) {
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={PLACEHOLDERS[selectedMode]}
-          disabled={isLoading}
+          placeholder={isLoading ? 'Type your next message...' : PLACEHOLDERS[selectedMode]}
           rows={3}
           style={{ minHeight: '88px', maxHeight: '200px' }}
-          className="w-full resize-none bg-transparent px-4 pt-4 pb-14 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none disabled:cursor-not-allowed"
+          className="w-full resize-none bg-transparent px-4 pt-4 pb-14 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
           aria-label="Prompt input"
         />
 
