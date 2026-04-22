@@ -131,6 +131,18 @@ export default function Home() {
     }
   }, []);
 
+  function extractMemoryFromTurn(userPrompt: string, assistantResponse: string) {
+    if (!userPrompt.trim() || !assistantResponse.trim()) return;
+    fetch('/api/memory', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ turns: [{ prompt: userPrompt, response: assistantResponse }] }),
+    })
+      .then((r) => r.json())
+      .then(({ facts }) => { if (facts?.length) mergeMemoryFacts(facts); })
+      .catch(() => {});
+  }
+
   function handleStop() {
     abortRef.current?.abort();
     const loadingTurn = chatTurns.findLast((t) => t.loading);
@@ -228,6 +240,7 @@ export default function Home() {
                 setStreamingContent((prev) => { const next = { ...prev }; delete next[turnId]; return next; });
                 addConversationTurn(submittedPrompt, accumulated);
                 addHistoryEntry({ id: turnId, prompt: submittedPrompt, mode: selectedMode, finalAnswer: accumulated, timestamp: new Date(), routerCategory: msg.routerDecision?.category, selectedProvider: msg.provider });
+                extractMemoryFromTurn(submittedPrompt, accumulated);
                 break outer;
               } else if (msg.t) {
                 accumulated += msg.t;
@@ -251,9 +264,10 @@ export default function Home() {
 
           if (selectedMode === 'all') {
             const firstResponse = result.responses.find((r) => r.content && !r.error);
-            if (firstResponse) addConversationTurn(submittedPrompt, firstResponse.content);
+            if (firstResponse) { addConversationTurn(submittedPrompt, firstResponse.content); extractMemoryFromTurn(submittedPrompt, firstResponse.content); }
           } else if (selectedMode !== 'image' && result.finalAnswer) {
             addConversationTurn(submittedPrompt, result.finalAnswer);
+            extractMemoryFromTurn(submittedPrompt, result.finalAnswer);
           }
 
           addHistoryEntry({ id: result.id, prompt: submittedPrompt, mode: selectedMode, finalAnswer: result.finalAnswer, imageUrl: result.imageResult?.url, timestamp: result.timestamp, routerCategory: result.routerDecision?.category, selectedProvider: result.routerDecision?.selectedModel });

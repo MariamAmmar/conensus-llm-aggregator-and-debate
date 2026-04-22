@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import type { ModelMode, ImageProviderMode, AppResult, ModelResponse, ComputeTier, ConversationMessage, AttachedImage, AttachedDocument, ProviderId } from '@/types';
-import { route } from '@/router';
+import { routeWithAgent } from '@/router/agent';
 import { TEXT_PROVIDERS, IMAGE_PROVIDERS, resolveImageProvider } from '@/providers';
 import { runDebate } from '@/debate';
 import { generateId } from '@/utils';
@@ -292,8 +292,8 @@ export async function POST(request: NextRequest) {
     }
 
     // ── Auto + single model modes ────────────────────────────────────────────
-    const routerDecision = route(augmentedPrompt, mode);
-    const providerId = routerDecision.selectedModel;
+    const routerDecision = await routeWithAgent(augmentedPrompt, mode);
+    const providerId = routerDecision.selectedModel as ProviderId;
 
     // Auto-routed to image
     if (routerDecision.requiresImageGeneration && IMAGE_PROVIDERS[providerId as keyof typeof IMAGE_PROVIDERS]) {
@@ -311,7 +311,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const provider = TEXT_PROVIDERS[providerId];
+    const provider = TEXT_PROVIDERS[providerId as ProviderId];
     if (!provider) {
       return NextResponse.json({ error: `Provider "${providerId}" is not available` }, { status: 501 });
     }
@@ -321,9 +321,10 @@ export async function POST(request: NextRequest) {
 
     // Fallback if primary provider errored
     if (response.error && routerDecision.fallbackModel) {
-      const fallback = TEXT_PROVIDERS[routerDecision.fallbackModel];
+      const fallbackId = routerDecision.fallbackModel as ProviderId;
+      const fallback = TEXT_PROVIDERS[fallbackId];
       if (fallback) {
-        response = await fallback.complete(augmentedPrompt, systemPrefix, 800, tier, history, images, routerDecision.fallbackModel === 'anthropic' ? pdfDocs : []);
+        response = await fallback.complete(augmentedPrompt, systemPrefix, 800, tier, history, images, fallbackId === 'anthropic' ? pdfDocs : []);
       }
     }
 
