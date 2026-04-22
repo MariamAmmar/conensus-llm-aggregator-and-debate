@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useState, KeyboardEvent } from 'react';
+import { useRef, useEffect, useState, KeyboardEvent, useCallback } from 'react';
 import { Send, Square, Paperclip, X, FileText, FileType, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAppStore } from '@/lib/store';
@@ -53,6 +53,8 @@ export function PromptInput({ onSubmit, onStop }: PromptInputProps) {
   const [documents, setDocuments] = useState<AttachedDocument[]>([]);
   const [enhancing, setEnhancing] = useState(false);
   const [enhanced, setEnhanced] = useState(false);
+  const [ideas, setIdeas] = useState<string[]>([]);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -65,6 +67,23 @@ export function PromptInput({ onSubmit, onStop }: PromptInputProps) {
   // Focus on mode change
   useEffect(() => {
     textareaRef.current?.focus();
+  }, [selectedMode]);
+
+  // Debounced question ideas as user types
+  const fetchIdeas = useCallback((value: string) => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (value.trim().length < 15) { setIdeas([]); return; }
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const res = await fetch('/api/question-ideas', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: value, mode: selectedMode }),
+        });
+        const { ideas: newIdeas } = await res.json();
+        if (Array.isArray(newIdeas)) setIdeas(newIdeas);
+      } catch { /* silent */ }
+    }, 600);
   }, [selectedMode]);
 
   function handleKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
@@ -80,6 +99,8 @@ export function PromptInput({ onSubmit, onStop }: PromptInputProps) {
     setImages([]);
     setDocuments([]);
     setEnhanced(false);
+    setIdeas([]);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
   }
 
   async function handleEnhance() {
@@ -153,6 +174,21 @@ export function PromptInput({ onSubmit, onStop }: PromptInputProps) {
 
   return (
     <div className="space-y-2">
+      {/* Question ideas */}
+      {ideas.length > 0 && !isLoading && (
+        <div className="flex flex-wrap gap-1.5 px-1">
+          {ideas.map((idea) => (
+            <button
+              key={idea}
+              onClick={() => { setPrompt(idea); setIdeas([]); }}
+              className="px-3 py-1 rounded-full text-xs border border-zinc-700 text-zinc-400 hover:border-indigo-500/60 hover:text-indigo-300 hover:bg-indigo-500/10 transition-all text-left"
+            >
+              {idea}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Image thumbnails */}
       {images.length > 0 && (
         <div className="flex flex-wrap gap-2 px-1">
@@ -209,7 +245,7 @@ export function PromptInput({ onSubmit, onStop }: PromptInputProps) {
         <textarea
           ref={textareaRef}
           value={prompt}
-          onChange={(e) => setPrompt(e.target.value)}
+          onChange={(e) => { setPrompt(e.target.value); fetchIdeas(e.target.value); }}
           onKeyDown={handleKeyDown}
           placeholder={isLoading ? 'Type your next message...' : PLACEHOLDERS[selectedMode]}
           rows={3}
