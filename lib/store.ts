@@ -33,6 +33,7 @@ interface AppActions {
   clearMemory: () => void;
   // Preferences
   setUserPreferences: (prefs: string) => void;
+  setSessionTitle: (title: string) => void;
   // Single-model / auto
   addConversationTurn: (userPrompt: string, assistantResponse: string) => void;
   clearConversation: () => void;
@@ -160,6 +161,16 @@ export const useAppStore = create<AppStore>()(
       // Network failure — fall back to localStorage silently
     }
   },
+
+  setSessionTitle: (title) =>
+    set((state) => {
+      if (!state.activeSessionId) return {};
+      return {
+        sessions: state.sessions.map((s) =>
+          s.id === state.activeSessionId ? { ...s, title } : s,
+        ),
+      };
+    }),
 
   addConversationTurn: (userPrompt, assistantResponse) =>
     set((state) => ({

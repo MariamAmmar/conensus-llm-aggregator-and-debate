@@ -63,6 +63,7 @@ export interface DebateResult {
   winner: ProviderId;
   synthesizedAnswer: string;
   synthesisReasoning: string;
+  summary?: string;
 }
 
 // Image generation result
@@ -138,6 +139,8 @@ export interface ChatTurn {
   result: AppResult | null;
   error: string | null;
   loading: boolean;
+  followupQuestions?: string[];
+  factCheck?: { score: number; flags: string[] };
 }
 
 // A saved chat session (stored when starting a new chat)

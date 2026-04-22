@@ -4,7 +4,8 @@
       "Bash(git commit -m 'feat: collapsible response previews in debate mode with see more/less *)",
       "Bash(git commit -m ' *)",
       "Bash(git commit -m 'fix: hide error and blank responses from all output panels *)",
-      "Bash(git commit *)"
+      "Bash(git commit *)",
+      "Bash(npm i *)"
     ],
     "additionalDirectories": [
       "/Users/jessica/conensus-llm-aggregator-and-debate/app/share"

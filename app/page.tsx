@@ -16,6 +16,7 @@ import type { HistoryEntry, AppResult, ChatTurn, AttachedImage, AttachedDocument
 import { generateId } from '@/utils';
 import { formatResponseContent } from '@/components/output/ResponseCard';
 import { DebateProgress } from '@/components/output/DebateProgress';
+import { FollowUpQuestions } from '@/components/output/FollowUpQuestions';
 
 const DEBATE_PROMPTS = [
   'Will AI take most jobs in the next 10 years?',
@@ -73,6 +74,7 @@ export default function Home() {
     userMemory,
     userPreferences,
     mergeMemoryFacts,
+    setSessionTitle,
   } = useAppStore();
 
   const { user, session } = useAuth();
@@ -131,16 +133,27 @@ export default function Home() {
     }
   }, []);
 
-  function extractMemoryFromTurn(userPrompt: string, assistantResponse: string) {
+  function runPostTurnAgents(turnId: string, userPrompt: string, assistantResponse: string, isFirstTurn: boolean) {
     if (!userPrompt.trim() || !assistantResponse.trim()) return;
-    fetch('/api/memory', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ turns: [{ prompt: userPrompt, response: assistantResponse }] }),
-    })
-      .then((r) => r.json())
-      .then(({ facts }) => { if (facts?.length) mergeMemoryFacts(facts); })
-      .catch(() => {});
+    const body = (data: object) => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+
+    // Memory extraction
+    fetch('/api/memory', body({ turns: [{ prompt: userPrompt, response: assistantResponse }] }))
+      .then((r) => r.json()).then(({ facts }) => { if (facts?.length) mergeMemoryFacts(facts); }).catch(() => {});
+
+    // Follow-up questions
+    fetch('/api/followup', body({ prompt: userPrompt, response: assistantResponse }))
+      .then((r) => r.json()).then(({ questions }) => { if (questions?.length) updateTurn(turnId, { followupQuestions: questions }); }).catch(() => {});
+
+    // Fact-check (single/auto responses only — skip debate/all/image)
+    fetch('/api/factcheck', body({ response: assistantResponse }))
+      .then((r) => r.json()).then((fc) => { if (fc) updateTurn(turnId, { factCheck: fc }); }).catch(() => {});
+
+    // Title agent — only on first turn of a new session
+    if (isFirstTurn) {
+      fetch('/api/title', body({ prompt: userPrompt }))
+        .then((r) => r.json()).then(({ title }) => { if (title) setSessionTitle(title); }).catch(() => {});
+    }
   }
 
   function handleStop() {
@@ -240,7 +253,7 @@ export default function Home() {
                 setStreamingContent((prev) => { const next = { ...prev }; delete next[turnId]; return next; });
                 addConversationTurn(submittedPrompt, accumulated);
                 addHistoryEntry({ id: turnId, prompt: submittedPrompt, mode: selectedMode, finalAnswer: accumulated, timestamp: new Date(), routerCategory: msg.routerDecision?.category, selectedProvider: msg.provider });
-                extractMemoryFromTurn(submittedPrompt, accumulated);
+                runPostTurnAgents(turnId, submittedPrompt, accumulated, chatTurns.length === 0);
                 break outer;
               } else if (msg.t) {
                 accumulated += msg.t;
@@ -262,12 +275,13 @@ export default function Home() {
           const result: AppResult = { ...data, timestamp: new Date(data.timestamp) };
           updateTurn(turnId, { result, loading: false });
 
+          const isFirst = chatTurns.length === 0;
           if (selectedMode === 'all') {
             const firstResponse = result.responses.find((r) => r.content && !r.error);
-            if (firstResponse) { addConversationTurn(submittedPrompt, firstResponse.content); extractMemoryFromTurn(submittedPrompt, firstResponse.content); }
+            if (firstResponse) { addConversationTurn(submittedPrompt, firstResponse.content); runPostTurnAgents(turnId, submittedPrompt, firstResponse.content, isFirst); }
           } else if (selectedMode !== 'image' && result.finalAnswer) {
             addConversationTurn(submittedPrompt, result.finalAnswer);
-            extractMemoryFromTurn(submittedPrompt, result.finalAnswer);
+            runPostTurnAgents(turnId, submittedPrompt, result.finalAnswer, isFirst);
           }
 
           addHistoryEntry({ id: result.id, prompt: submittedPrompt, mode: selectedMode, finalAnswer: result.finalAnswer, imageUrl: result.imageResult?.url, timestamp: result.timestamp, routerCategory: result.routerDecision?.category, selectedProvider: result.routerDecision?.selectedModel });
@@ -449,6 +463,26 @@ export default function Home() {
                     {turn.result && (
                       <>
                         <OutputPanel result={turn.result} />
+
+                        {/* Fact-check badge — single/auto modes only */}
+                        {turn.factCheck && turn.result.mode !== 'debate' && turn.result.mode !== 'all' && turn.result.mode !== 'image' && (
+                          <div className="flex items-center gap-2 text-xs text-zinc-500">
+                            <div className={`w-1.5 h-1.5 rounded-full ${turn.factCheck.score >= 85 ? 'bg-emerald-500' : turn.factCheck.score >= 65 ? 'bg-amber-500' : 'bg-red-500'}`} />
+                            <span>Fact confidence: <span className={turn.factCheck.score >= 85 ? 'text-emerald-400' : turn.factCheck.score >= 65 ? 'text-amber-400' : 'text-red-400'}>{turn.factCheck.score}%</span></span>
+                            {turn.factCheck.flags.length > 0 && (
+                              <span className="text-zinc-600">· {turn.factCheck.flags[0]}</span>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Follow-up question chips */}
+                        {turn.followupQuestions && turn.followupQuestions.length > 0 && (
+                          <FollowUpQuestions
+                            questions={turn.followupQuestions}
+                            onSelect={(q) => setPrompt(q)}
+                          />
+                        )}
+
                         <div className="flex justify-start">
                           <button
                             onClick={() => handleSubmit(turn.prompt, turn.images, turn.documents)}

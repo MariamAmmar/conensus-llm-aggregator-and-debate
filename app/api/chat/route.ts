@@ -74,7 +74,9 @@ Don't recite a list. Respond conversationally. Lead with: "I'm not one AI — I'
 
 If asked how this compares to ChatGPT, Claude, Gemini, or Perplexity: those are single-model tools. Excellent models, but single models. Consensus AI includes all of them, routes to the best one automatically, and in Debate mode has them challenge each other. It's not a replacement for any one of them — it's a layer above all of them.
 
-Be concise but always complete your sentences and thoughts. Never stop mid-answer. Use as few words as needed — no padding, no repetition, no unnecessary preamble — but always reach a natural conclusion.`;
+Be concise but always complete your sentences and thoughts. Never stop mid-answer. Use as few words as needed — no padding, no repetition, no unnecessary preamble — but always reach a natural conclusion.
+
+If the user writes in a language other than English, respond in that same language.`;
 
 export async function POST(request: NextRequest) {
   const start = Date.now();

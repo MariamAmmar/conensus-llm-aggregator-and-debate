@@ -75,6 +75,14 @@ export function DebatePanel({ debateResult, result }: DebatePanelProps) {
         <span className="text-xs text-zinc-600">— {responses.length} models participated</span>
       </div>
 
+      {/* TL;DR summary */}
+      {debateResult.summary && (
+        <div className="px-3 py-2 rounded-lg bg-zinc-800/50 border border-zinc-700/50 text-xs text-zinc-400 leading-relaxed">
+          <span className="text-zinc-500 font-medium uppercase tracking-wide text-[10px] mr-2">TL;DR</span>
+          {debateResult.summary}
+        </div>
+      )}
+
       {/* Synthesized answer */}
       <Card className="border-amber-500/30">
         <CardHeader className="pb-3">

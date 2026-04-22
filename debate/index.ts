@@ -3,6 +3,9 @@ import { TEXT_PROVIDERS } from '@/providers';
 import { DEBATE_CONFIG } from '@/config/debate';
 import { DEBATE_SCORE_WEIGHTS } from '@/config/routing';
 import { determineWinner } from './judge';
+import OpenAI from 'openai';
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
 const PARTICIPANTS = DEBATE_CONFIG.participants;
 
@@ -33,7 +36,10 @@ export async function runDebate(prompt: string, history: ConversationMessage[] =
   const winner = determineWinner(scores);
 
   // Round 4: winner synthesizes a final answer (with conversation history for context)
-  const { synthesizedAnswer, synthesisReasoning } = await synthesize(prompt, responses, scores, winner, history, memoryContext);
+  const [{ synthesizedAnswer, synthesisReasoning }, summary] = await Promise.all([
+    synthesize(prompt, responses, scores, winner, history, memoryContext),
+    generateSummary(prompt),
+  ]);
 
   return {
     responses: allResponses, // include errors so UI can show them
@@ -42,6 +48,7 @@ export async function runDebate(prompt: string, history: ConversationMessage[] =
     winner,
     synthesizedAnswer,
     synthesisReasoning,
+    summary,
   };
 }
 
@@ -285,6 +292,23 @@ Instructions:
     synthesizedAnswer: result.content,
     synthesisReasoning: reasoning,
   };
+}
+
+async function generateSummary(prompt: string): Promise<string> {
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      max_tokens: 60,
+      temperature: 0,
+      messages: [
+        { role: 'system', content: 'Write a 1-sentence TL;DR for what this debate question is really asking. Plain text, no quotes.' },
+        { role: 'user', content: prompt },
+      ],
+    });
+    return completion.choices[0]?.message?.content?.trim() ?? '';
+  } catch {
+    return '';
+  }
 }
 
 function clamp(val: number, min: number, max: number): number {
