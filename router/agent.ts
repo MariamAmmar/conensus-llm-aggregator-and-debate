@@ -77,7 +77,7 @@ Respond with ONLY valid JSON — no markdown, no explanation:
       deepseek: 'logic', openai: 'writing', grok: 'general',
       gemini: 'general', llama: 'general',
     };
-    const category = providerToCategory[providerId] ?? 'general';
+    const category = (providerToCategory[providerId] ?? 'general') as keyof typeof ROUTING_RULES;
     const rule = ROUTING_RULES[category] ?? ROUTING_RULES['general'];
 
     return {
