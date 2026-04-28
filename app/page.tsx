@@ -299,10 +299,11 @@ export default function Home() {
           });
 
           if (!res.ok) {
-            const data = await res.json();
+            let data: { code?: string; message?: string; error?: string } = {};
+            try { data = await res.json(); } catch { /* non-JSON error body (e.g. 502/504) */ }
             if (res.status === 429 && data.code === 'LIMIT_REACHED') { updateTurn(turnId, { loading: false, error: null }); setLoading(false); setShowLoginGate(true); setStreamingDebate(null); return; }
             if (res.status === 402 && data.code === 'SUBSCRIPTION_REQUIRED') { updateTurn(turnId, { loading: false, error: null }); setLoading(false); setShowTrialModal(true); setStreamingDebate(null); return; }
-            throw new Error(data.message || data.error || 'Request failed');
+            throw new Error(data.message || data.error || `Debate request failed (${res.status})`);
           }
 
           const reader = res.body!.getReader();
@@ -394,12 +395,13 @@ export default function Home() {
 
           // Auth/limit errors arrive as JSON before the stream
           if (!res.ok) {
-            const data = await res.json();
+            let data: { code?: string; message?: string; error?: string } = {};
+            try { data = await res.json(); } catch { /* non-JSON error body (e.g. 502/504) */ }
             if (res.status === 429 && data.code === 'LIMIT_REACHED') { updateTurn(turnId, { loading: false, error: null }); setLoading(false); setShowLoginGate(true); return; }
             if (res.status === 402 && data.code === 'SUBSCRIPTION_REQUIRED') { updateTurn(turnId, { loading: false, error: null }); setLoading(false); setShowTrialModal(true); return; }
             // Image route or other — fall through to main route
             if (data.error?.toLowerCase().includes('image')) throw new Error('image-fallback');
-            throw new Error(data.message || data.error || 'Request failed');
+            throw new Error(data.message || data.error || `Request failed (${res.status})`);
           }
 
           const reader = res.body!.getReader();
