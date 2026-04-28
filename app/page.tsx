@@ -12,13 +12,14 @@ import { PromptInput } from '@/components/prompt/PromptInput';
 import { OutputPanel } from '@/components/output/OutputPanel';
 import { LoginModal } from '@/components/auth/LoginModal';
 import { TrialModal } from '@/components/auth/TrialModal';
-import { Sparkles, AlertCircle, CheckCircle, RotateCcw } from 'lucide-react';
+import { Sparkles, AlertCircle, CheckCircle, RotateCcw, FileDown } from 'lucide-react';
 import type { HistoryEntry, AppResult, ChatTurn, AttachedImage, AttachedDocument, ModelResponse, ResponseScore, ProviderId, DebateResult } from '@/types';
 import { generateId } from '@/utils';
 import { DebateProgress } from '@/components/output/DebateProgress';
 import { FollowUpQuestions } from '@/components/output/FollowUpQuestions';
 import { MarkdownContent } from '@/components/output/MarkdownContent';
 import { ResponseCard } from '@/components/output/ResponseCard';
+import { WelcomeTour } from '@/components/onboarding/WelcomeTour';
 
 const DEBATE_PROMPTS = [
   'Will AI take most jobs in the next 10 years?',
@@ -100,10 +101,13 @@ export default function Home() {
   // Pick a new funny prompt on each page load (after hydration to avoid SSR mismatch)
   const [rotatingPrompt, setRotatingPrompt] = useState(ROTATING_PROMPTS[0]);
   const [debatePrompts, setDebatePrompts] = useState(() => DEBATE_PROMPTS.slice(0, 4));
+  const [showTour, setShowTour] = useState(false);
   useEffect(() => {
     setRotatingPrompt(ROTATING_PROMPTS[Math.floor(Math.random() * ROTATING_PROMPTS.length)]);
     const shuffled = [...DEBATE_PROMPTS].sort(() => Math.random() - 0.5);
     setDebatePrompts(shuffled.slice(0, 4));
+    // Show tour automatically on first ever visit
+    if (!localStorage.getItem('consensus-tour-seen')) setShowTour(true);
   }, []);
 
   // Sync sessions on load and whenever auth state changes (login/logout)
@@ -228,6 +232,82 @@ export default function Home() {
       fetch('/api/title', body({ prompts }))
         .then((r) => r.json()).then(({ title }) => { if (title) setSessionTitle(title); }).catch(() => {});
     }
+  }
+
+  function isDocumentResponse(content: string | null | undefined): boolean {
+    if (!content || content.length < 600) return false;
+    const hasHeaders = /^#{1,3}\s+\S/m.test(content);
+    const hasKeywords = /\b(resume|cv|cover letter|report|proposal|brief|memo|essay|article|business plan|executive summary|white\s*paper|case study)\b/i.test(content);
+    return hasHeaders && hasKeywords;
+  }
+
+  function downloadResponseAsPdf(turnId: string, promptText: string) {
+    const el = document.getElementById(`result-${turnId}`);
+    if (!el) return;
+    const win = window.open('', '_blank');
+    if (!win) return;
+    const safeTitle = promptText.slice(0, 80).replace(/[<>"&]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '"': '&quot;', '&': '&amp;' }[c]!));
+    win.document.write(`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>${safeTitle}</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; max-width: 800px; margin: 40px auto; padding: 0 24px; color: #18181b; background: white; line-height: 1.65; font-size: 15px; }
+  h1 { font-size: 1.5rem; font-weight: 700; margin: 1.5em 0 0.5em; color: #09090b; }
+  h2 { font-size: 1.25rem; font-weight: 600; margin: 1.5em 0 0.5em; color: #09090b; }
+  h3 { font-size: 1.1rem; font-weight: 600; margin: 1.25em 0 0.5em; color: #09090b; }
+  p { margin: 0.65em 0; }
+  ul, ol { padding-left: 1.5em; margin: 0.5em 0; }
+  li { margin: 0.25em 0; }
+  code { font-family: ui-monospace, 'SF Mono', Consolas, monospace; font-size: 0.85em; background: #f4f4f5; color: #18181b; padding: 0.15em 0.4em; border-radius: 3px; }
+  pre { background: #f4f4f5; padding: 1em; border-radius: 6px; overflow-x: auto; margin: 1em 0; }
+  pre code { background: none; padding: 0; }
+  blockquote { border-left: 3px solid #a1a1aa; margin: 1em 0; padding: 0.5em 1em; color: #52525b; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; }
+  th, td { border: 1px solid #e4e4e7; padding: 8px 12px; text-align: left; }
+  th { background: #f9f9f9; font-weight: 600; }
+  hr { border: none; border-top: 1px solid #e4e4e7; margin: 1.5em 0; }
+  a { color: #4f46e5; }
+  strong { font-weight: 600; }
+  /* Override Tailwind dark-theme colours */
+  .text-zinc-100, .text-zinc-200, .text-zinc-300 { color: #18181b !important; }
+  .text-zinc-400, .text-zinc-500 { color: #52525b !important; }
+  .text-zinc-600 { color: #71717a !important; }
+  .text-white { color: #18181b !important; }
+  .bg-zinc-700, .bg-zinc-800, .bg-zinc-900, .bg-zinc-950 { background: #f4f4f5 !important; }
+  .border-zinc-700, .border-zinc-800 { border-color: #e4e4e7 !important; }
+  .text-amber-300, .text-amber-400 { color: #b45309 !important; }
+  .text-emerald-300, .text-emerald-400 { color: #059669 !important; }
+  .text-indigo-300, .text-indigo-400 { color: #4338ca !important; }
+  .text-pink-300, .text-pink-400 { color: #be185d !important; }
+  .text-red-400 { color: #dc2626 !important; }
+  .text-blue-400 { color: #2563eb !important; }
+  .text-orange-400 { color: #ea580c !important; }
+  .text-rose-400 { color: #e11d48 !important; }
+  .text-cyan-400 { color: #0891b2 !important; }
+  .text-lime-400 { color: #65a30d !important; }
+  .text-sky-400 { color: #0284c7 !important; }
+  .text-violet-400 { color: #7c3aed !important; }
+  /* User bubble keeps its colour */
+  .bg-indigo-600 { background: #4f46e5 !important; color: white !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  /* Cards */
+  [class*="border-amber-"] { border-color: #fcd34d !important; }
+  [class*="bg-amber-"] { background: #fffbeb !important; }
+  /* Hide interactive elements */
+  button { display: none !important; }
+  .pdf-header { font-size: 0.85em; color: #71717a; padding-bottom: 0.75em; margin-bottom: 1.5em; border-bottom: 1px solid #e4e4e7; }
+</style>
+</head>
+<body>
+<div class="pdf-header">Consensus AI &mdash; ${safeTitle}</div>
+${el.innerHTML}
+</body>
+</html>`);
+    win.document.close();
+    win.focus();
+    setTimeout(() => win.print(), 400);
   }
 
   function handleStop() {
@@ -547,10 +627,15 @@ export default function Home() {
           Trial started! You now have unlimited access for 7 days.
         </div>
       )}
-      <Sidebar />
+      <div className="print:hidden">
+        <Sidebar />
+      </div>
 
       <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <Header />
+        <div className="print:hidden">
+          <Header onOpenTour={() => setShowTour(true)} />
+        </div>
+        {showTour && <WelcomeTour onClose={() => setShowTour(false)} />}
 
         {chatTurns.length === 0 ? (
           /* ── Empty state: input centered in the page ── */
@@ -609,6 +694,17 @@ export default function Home() {
           <>
             <main className="flex-1 overflow-y-auto" ref={mainRef}>
               <div className="max-w-3xl mx-auto px-4 py-6 space-y-8">
+                {/* PDF export toolbar — hidden when printing */}
+                <div className="flex items-center justify-end print:hidden">
+                  <button
+                    onClick={() => window.print()}
+                    className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                    title="Save conversation as PDF"
+                  >
+                    <FileDown className="w-3.5 h-3.5" />
+                    Save as PDF
+                  </button>
+                </div>
                 {chatTurns.map((turn) => (
                   <div key={turn.id} className="space-y-4">
                     {/* User bubble */}
@@ -716,7 +812,9 @@ export default function Home() {
                     {/* Result */}
                     {turn.result && (
                       <>
-                        <OutputPanel result={turn.result} />
+                        <div id={`result-${turn.id}`}>
+                          <OutputPanel result={turn.result} />
+                        </div>
 
                         {/* Fact-check badge — single/auto modes only */}
                         {turn.factCheck && turn.result.mode !== 'debate' && turn.result.mode !== 'all' && turn.result.mode !== 'image' && (
@@ -731,7 +829,7 @@ export default function Home() {
 
                         {/* Follow-up question skeleton while loading */}
                         {!turn.followupQuestions && loadingFollowups.has(turn.id) && (
-                          <div className="flex gap-2 flex-wrap">
+                          <div className="flex gap-2 flex-wrap print:hidden">
                             {[108, 148, 122].map((w, i) => (
                               <div key={i} className="h-7 rounded-full skeleton" style={{ width: `${w}px` }} />
                             ))}
@@ -740,13 +838,26 @@ export default function Home() {
 
                         {/* Follow-up question chips */}
                         {turn.followupQuestions && turn.followupQuestions.length > 0 && (
-                          <FollowUpQuestions
-                            questions={turn.followupQuestions}
-                            onSelect={(q) => setPrompt(q)}
-                          />
+                          <div className="print:hidden">
+                            <FollowUpQuestions
+                              questions={turn.followupQuestions}
+                              onSelect={(q) => setPrompt(q)}
+                            />
+                          </div>
                         )}
 
-                        <div className="flex justify-start">
+                        {/* Prominent export button for document-like responses */}
+                        {isDocumentResponse(turn.result.finalAnswer) && (
+                          <button
+                            onClick={() => downloadResponseAsPdf(turn.id, turn.prompt)}
+                            className="flex items-center gap-2 w-full px-3 py-2.5 rounded-lg border border-indigo-500/30 bg-indigo-500/10 text-indigo-300 text-xs font-medium hover:bg-indigo-500/15 hover:border-indigo-500/50 transition-all print:hidden"
+                          >
+                            <FileDown className="w-3.5 h-3.5" />
+                            Export as PDF Document
+                          </button>
+                        )}
+
+                        <div className="flex items-center justify-between print:hidden">
                           <button
                             onClick={() => handleSubmit(turn.prompt, turn.images, turn.documents)}
                             disabled={isLoading}
@@ -754,6 +865,13 @@ export default function Home() {
                           >
                             <RotateCcw className="w-3 h-3" />
                             Regenerate
+                          </button>
+                          <button
+                            onClick={() => downloadResponseAsPdf(turn.id, turn.prompt)}
+                            className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                          >
+                            <FileDown className="w-3.5 h-3.5" />
+                            Save as PDF
                           </button>
                         </div>
                       </>
@@ -764,7 +882,7 @@ export default function Home() {
               </div>
             </main>
 
-            <div className="bg-zinc-950 pb-6 pt-3 border-t border-zinc-800/60" style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
+            <div className="bg-zinc-950 pb-6 pt-3 border-t border-zinc-800/60 print:hidden" style={{ paddingBottom: 'max(1.5rem, env(safe-area-inset-bottom))' }}>
               <div className="max-w-3xl mx-auto px-4 space-y-3">
                 <ModelSelector />
                 <PromptInput onSubmit={handleSubmit} onStop={handleStop} />

@@ -89,3 +89,61 @@
   background-size: 200% 100%;
   animation: shimmer 2s linear infinite;
 }
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ── Print / Save as PDF ────────────────────────────────────────────── */
+@media print {
+  body {
+    background: white !important;
+    color: #18181b !important;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  /* Undo height and overflow constraints so all content renders */
+  html, body {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* The root flex shell */
+  .h-screen-safe {
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  /* Inner column */
+  .flex-1.min-w-0.overflow-hidden {
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  /* Scrollable conversation area */
+  main {
+    overflow: visible !important;
+    height: auto !important;
+    max-height: none !important;
+  }
+
+  /* Lighten the page background for the conversation wrapper */
+  .bg-zinc-950 {
+    background: white !important;
+  }
+
+  /* User message bubble — keep indigo, just ensure it prints */
+  .bg-indigo-600 {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* Code blocks readable on white */
+  .response-content code {
+    background: #f4f4f5 !important;
+    color: #18181b !important;
+  }
+}

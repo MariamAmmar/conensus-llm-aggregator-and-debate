@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Sparkles, PanelLeft, LogOut, User, CreditCard, Settings2 } from 'lucide-react';
+import { Sparkles, PanelLeft, LogOut, User, CreditCard, Settings2, HelpCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAppStore } from '@/lib/store';
@@ -11,7 +11,11 @@ import { AvatarUpload } from '@/components/auth/AvatarUpload';
 import { AccountModal } from '@/components/auth/AccountModal';
 import { SettingsPanel } from '@/components/settings/SettingsPanel';
 
-export function Header() {
+interface HeaderProps {
+  onOpenTour?: () => void;
+}
+
+export function Header({ onOpenTour }: HeaderProps) {
   const { mockMode, toggleSidebar, toggleSettings } = useAppStore();
   const { user, session, loading } = useAuth();
   const [showLogin, setShowLogin] = useState(false);
@@ -67,8 +71,20 @@ export function Header() {
           )}
         </div>
 
-        {/* Right: settings + auth */}
+        {/* Right: help + settings + auth */}
         <div className="flex items-center gap-2">
+          {onOpenTour && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onOpenTour}
+              className="text-zinc-400 hover:text-zinc-100"
+              aria-label="How to use Consensus AI"
+              title="How to use Consensus AI"
+            >
+              <HelpCircle className="w-4 h-4" />
+            </Button>
+          )}
           <Button
             variant="ghost"
             size="icon"

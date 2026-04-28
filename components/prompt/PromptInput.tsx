@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useEffect, useState, KeyboardEvent, useCallback } from 'react';
-import { Send, Square, Paperclip, X, FileText, FileType, Sparkles } from 'lucide-react';
+import { Send, Square, Paperclip, X, FileText, FileType, Sparkles, Music, Table, Presentation, File } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useAppStore } from '@/lib/store';
 import { cn } from '@/lib/utils';
@@ -23,20 +23,24 @@ const PLACEHOLDERS: Record<ModelMode, string> = {
   image: 'Describe the image you want to generate...',
 };
 
-// File extensions treated as plain text
 const TEXT_EXTENSIONS = new Set([
   'txt', 'md', 'markdown', 'csv', 'json', 'html', 'htm', 'xml',
   'yaml', 'yml', 'toml', 'ini', 'log', 'py', 'js', 'ts', 'tsx',
   'jsx', 'css', 'sh', 'bash', 'env', 'sql', 'rs', 'go', 'java',
   'c', 'cpp', 'h', 'rb', 'php', 'swift', 'kt', 'r',
 ]);
+const OFFICE_EXTENSIONS = new Set(['docx', 'doc', 'xlsx', 'xls', 'pptx', 'ppt']);
+const AUDIO_EXTENSIONS = new Set(['mp3', 'wav', 'm4a', 'ogg', 'flac', 'webm', 'aac', 'opus']);
 
-function getFileCategory(file: File): 'image' | 'pdf' | 'text' | null {
+type FileCategory = 'image' | 'pdf' | 'text' | 'office' | 'audio' | null;
+
+function getFileCategory(file: File): FileCategory {
   if (file.type.startsWith('image/')) return 'image';
   if (file.type === 'application/pdf') return 'pdf';
   const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
-  if (TEXT_EXTENSIONS.has(ext)) return 'text';
-  if (file.type.startsWith('text/')) return 'text';
+  if (TEXT_EXTENSIONS.has(ext) || file.type.startsWith('text/')) return 'text';
+  if (OFFICE_EXTENSIONS.has(ext)) return 'office';
+  if (AUDIO_EXTENSIONS.has(ext) || file.type.startsWith('audio/')) return 'audio';
   return null;
 }
 
@@ -51,6 +55,7 @@ export function PromptInput({ onSubmit, onStop }: PromptInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [images, setImages] = useState<AttachedImage[]>([]);
   const [documents, setDocuments] = useState<AttachedDocument[]>([]);
+  const [extractingIds, setExtractingIds] = useState<Set<string>>(new Set());
   const [enhancing, setEnhancing] = useState(false);
   const [enhanced, setEnhanced] = useState(false);
   const [ideas, setIdeas] = useState<string[]>([]);
@@ -154,6 +159,31 @@ export function PromptInput({ onSubmit, onStop }: PromptInputProps) {
           ]);
         };
         reader.readAsDataURL(file);
+      } else if (category === 'office' || category === 'audio') {
+        const id = generateId();
+        // Add a placeholder chip immediately so user sees it's being processed
+        setDocuments((prev) => [
+          ...prev,
+          { id, name: file.name, mimeType: file.type || 'application/octet-stream', contentType: 'text', content: '' },
+        ]);
+        setExtractingIds((prev) => new Set([...prev, id]));
+
+        const endpoint = category === 'audio' ? '/api/transcribe' : '/api/extract-document';
+        const fd = new FormData();
+        fd.append('file', file);
+        fetch(endpoint, { method: 'POST', body: fd })
+          .then((r) => r.json())
+          .then(({ text, error }) => {
+            if (error || !text) {
+              setDocuments((prev) => prev.filter((d) => d.id !== id));
+            } else {
+              setDocuments((prev) =>
+                prev.map((d) => d.id === id ? { ...d, content: text } : d),
+              );
+            }
+          })
+          .catch(() => setDocuments((prev) => prev.filter((d) => d.id !== id)))
+          .finally(() => setExtractingIds((prev) => { const next = new Set(prev); next.delete(id); return next; }));
       }
     });
     e.target.value = '';
@@ -213,24 +243,45 @@ export function PromptInput({ onSubmit, onStop }: PromptInputProps) {
       {/* Document chips */}
       {documents.length > 0 && (
         <div className="flex flex-wrap gap-2 px-1">
-          {documents.map((doc) => (
-            <div
-              key={doc.id}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-zinc-800 border border-zinc-700 text-xs text-zinc-300 max-w-[130px] sm:max-w-[180px] group"
-            >
-              {doc.contentType === 'pdf'
-                ? <FileType className="w-3.5 h-3.5 text-red-400 shrink-0" />
-                : <FileText className="w-3.5 h-3.5 text-blue-400 shrink-0" />
-              }
-              <span className="truncate">{doc.name}</span>
-              <button
-                onClick={() => removeDocument(doc.id)}
-                className="ml-auto shrink-0 text-zinc-600 hover:text-zinc-300 transition-colors"
+          {documents.map((doc) => {
+            const ext = doc.name.split('.').pop()?.toLowerCase() ?? '';
+            const isExtracting = extractingIds.has(doc.id);
+            const icon = doc.contentType === 'pdf'
+              ? <FileType className="w-3.5 h-3.5 text-red-400 shrink-0" />
+              : AUDIO_EXTENSIONS.has(ext)
+                ? <Music className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                : ['xlsx', 'xls', 'csv'].includes(ext)
+                  ? <Table className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  : ['pptx', 'ppt'].includes(ext)
+                    ? <Presentation className="w-3.5 h-3.5 text-orange-400 shrink-0" />
+                    : ['docx', 'doc'].includes(ext)
+                      ? <FileText className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                      : <File className="w-3.5 h-3.5 text-zinc-400 shrink-0" />;
+            return (
+              <div
+                key={doc.id}
+                className={cn(
+                  'flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs text-zinc-300 max-w-[130px] sm:max-w-[180px] group transition-colors',
+                  isExtracting
+                    ? 'bg-zinc-800/50 border-zinc-700/50 text-zinc-500'
+                    : 'bg-zinc-800 border-zinc-700',
+                )}
               >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          ))}
+                {isExtracting
+                  ? <div className="w-3.5 h-3.5 border border-zinc-500 border-t-indigo-400 rounded-full animate-spin shrink-0" />
+                  : icon}
+                <span className="truncate">{isExtracting ? 'Reading…' : doc.name}</span>
+                {!isExtracting && (
+                  <button
+                    onClick={() => removeDocument(doc.id)}
+                    className="ml-auto shrink-0 text-zinc-600 hover:text-zinc-300 transition-colors"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -271,7 +322,7 @@ export function PromptInput({ onSubmit, onStop }: PromptInputProps) {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*,.pdf,.txt,.md,.csv,.json,.html,.htm,.xml,.yaml,.yml,.log,.py,.js,.ts,.tsx,.jsx,.css,.sh,.sql,.env,.toml"
+                  accept="*"
                   multiple
                   className="hidden"
                   onChange={handleFileChange}
