@@ -150,10 +150,27 @@ export function DebatePanel({ debateResult, result }: DebatePanelProps) {
           {/* Toggle to see model comparison */}
           <button
             onClick={() => setShowComparison(!showComparison)}
-            className="flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 transition-colors pt-3 border-t border-zinc-800 w-full font-medium"
+            className={cn(
+              'flex items-center justify-between w-full mt-2 px-3 py-2.5 rounded-lg border text-xs font-medium transition-all duration-150',
+              showComparison
+                ? 'bg-zinc-800 border-zinc-700 text-zinc-300'
+                : 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300 hover:bg-indigo-500/15 hover:border-indigo-500/50',
+            )}
           >
-            {showComparison ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-            {showComparison ? 'Hide model comparison' : 'See how models compared'}
+            <span className="flex items-center gap-2">
+              {showComparison ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+              {showComparison
+                ? 'Hide individual responses'
+                : `See all ${validResponses.length} model responses & scores`}
+            </span>
+            {!showComparison && (
+              <span className="flex gap-1">
+                {validResponses.slice(0, 4).map((r) => (
+                  <span key={r.provider} className="w-1.5 h-1.5 rounded-full bg-indigo-400/60" />
+                ))}
+                {validResponses.length > 4 && <span className="text-indigo-400/60">+{validResponses.length - 4}</span>}
+              </span>
+            )}
           </button>
         </CardContent>
       </Card>

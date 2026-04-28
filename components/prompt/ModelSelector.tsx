@@ -95,10 +95,10 @@ export function ModelSelector() {
     }
   }
 
-  const topOptions: { id: TopLevel; label: string; icon: React.ReactNode }[] = [
-    { id: 'auto',   label: 'Auto',         icon: <Sparkles className="w-3.5 h-3.5" /> },
-    { id: 'select', label: 'Select Model', icon: <ChevronDown className="w-3.5 h-3.5" /> },
-    { id: 'debate', label: 'Debate',       icon: <Users className="w-3.5 h-3.5" /> },
+  const topOptions: { id: TopLevel; label: string; icon: React.ReactNode; badge?: string }[] = [
+    { id: 'auto',   label: 'Auto',   icon: <Sparkles className="w-3.5 h-3.5" /> },
+    { id: 'select', label: 'Choose', icon: <ChevronDown className="w-3.5 h-3.5" /> },
+    { id: 'debate', label: 'Debate', icon: <Users className="w-3.5 h-3.5" />, badge: '✦ Best' },
   ];
 
   const topActiveColor: Record<TopLevel, string> = {
@@ -134,7 +134,7 @@ export function ModelSelector() {
               key={opt.id}
               onClick={() => handleTopLevel(opt.id)}
               className={cn(
-                'inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-150 flex-1 sm:flex-none justify-center sm:justify-start',
+                'relative inline-flex items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg text-sm font-medium border transition-all duration-150 flex-1 sm:flex-none justify-center sm:justify-start',
                 isActive
                   ? topActiveColor[opt.id]
                   : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200 hover:bg-zinc-800',
@@ -143,10 +143,31 @@ export function ModelSelector() {
             >
               {opt.icon}
               {opt.label}
+              {opt.badge && !isActive && (
+                <span className="ml-0.5 text-[10px] font-semibold text-pink-400 opacity-80">{opt.badge}</span>
+              )}
             </button>
           );
         })}
       </div>
+
+      {/* Debate explainer — shown when Debate tab is active */}
+      {topLevel === 'debate' && (
+        <div className="flex items-start gap-3 px-3 py-2.5 rounded-lg bg-pink-500/5 border border-pink-500/20">
+          <div className="flex gap-2 mt-0.5 shrink-0">
+            {['1', '2', '3'].map((n) => (
+              <span key={n} className="w-4 h-4 rounded-full bg-pink-500/20 border border-pink-500/30 text-[10px] font-bold text-pink-400 flex items-center justify-center">{n}</span>
+            ))}
+          </div>
+          <p className="text-xs text-zinc-400 leading-relaxed">
+            <span className="text-pink-300 font-medium">8 models answer independently</span>
+            {' → '}
+            <span className="text-amber-300 font-medium">score each other</span>
+            {' → '}
+            <span className="text-emerald-300 font-medium">best answer is synthesized</span>
+          </p>
+        </div>
+      )}
 
       {/* Model sub-selector — multi-select for text models */}
       {topLevel === 'select' && (
@@ -230,8 +251,8 @@ export function ModelSelector() {
         </div>
       )}
 
-      {/* Description */}
-      {!multiActive && (
+      {/* Description — hidden for debate (the explainer panel above replaces it) */}
+      {!multiActive && topLevel !== 'debate' && (
         <p className="text-xs text-zinc-500 pl-1">
           <span className={cn('font-medium', descriptionColor)}>{descriptionLabel}</span>
           {' — '}
