@@ -53,17 +53,23 @@ export async function runDebate(prompt: string, history: ConversationMessage[] =
 }
 
 async function collectResponses(prompt: string, history: ConversationMessage[], memoryContext = ''): Promise<ModelResponse[]> {
-  const results = await Promise.all(
+  const settled = await Promise.allSettled(
     PARTICIPANTS.map(async (pid) => {
       const provider = TEXT_PROVIDERS[pid];
       if (!provider) return null;
       return provider.complete(prompt, memoryContext || undefined, DEBATE_CONFIG.maxResponseTokens, 'standard', history);
     }),
   );
-  return results.filter(Boolean) as ModelResponse[];
+  return settled
+    .map((r, i) =>
+      r.status === 'fulfilled'
+        ? r.value
+        : ({ provider: PARTICIPANTS[i], content: '', error: r.reason?.message ?? 'Provider failed', latencyMs: 0, isGrounded: false } as ModelResponse),
+    )
+    .filter(Boolean) as ModelResponse[];
 }
 
-async function crossJudgeScore(prompt: string, responses: ModelResponse[]): Promise<ResponseScore[]> {
+export async function crossJudgeScore(prompt: string, responses: ModelResponse[]): Promise<ResponseScore[]> {
   // Each provider scores every response except its own (light/cheap tier)
   // Shape: scoresByProvider[judge][target] = score object
   const allJudgements: ScoringEntry[][] = [];
@@ -71,12 +77,11 @@ async function crossJudgeScore(prompt: string, responses: ModelResponse[]): Prom
   // Only use models that successfully responded as judges
   const validJudges = responses.filter((r) => !r.error && r.content.trim().length > 0).map((r) => r.provider);
 
-  await Promise.all(
+  await Promise.allSettled(
     validJudges.map(async (judgeId) => {
       const provider = TEXT_PROVIDERS[judgeId];
       if (!provider) return;
 
-      // Only score responses from OTHER models that also succeeded
       const targets = responses.filter((r) => r.provider !== judgeId && !r.error && r.content.trim().length > 0);
       if (targets.length === 0) return;
 
@@ -288,8 +293,11 @@ Instructions:
   const winnerScore = scores.find((s) => s.provider === winner);
   const reasoning = `${winner} won with a peer-averaged score of ${winnerScore?.totalScore.toFixed(2) ?? 'n/a'} across ${SCORE_DIMENSIONS.length} dimensions. Scores were assigned by the other participating models, excluding self-evaluation.`;
 
+  const synthesizedAnswer = result.content.trim() ||
+    (responses.find((r) => r.provider === winner)?.content ?? '');
+
   return {
-    synthesizedAnswer: result.content,
+    synthesizedAnswer,
     synthesisReasoning: reasoning,
   };
 }

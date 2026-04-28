@@ -5,7 +5,9 @@
       "Bash(git commit -m ' *)",
       "Bash(git commit -m 'fix: hide error and blank responses from all output panels *)",
       "Bash(git commit *)",
-      "Bash(npm i *)"
+      "Bash(npm i *)",
+      "Read(//Users/jessica/.claude/**)",
+      "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\({k: v[:10]+'...' if isinstance\\(v,str\\) and len\\(v\\)>10 else v for k,v in d.items\\(\\)}\\)\")"
     ],
     "additionalDirectories": [
       "/Users/jessica/conensus-llm-aggregator-and-debate/app/share"

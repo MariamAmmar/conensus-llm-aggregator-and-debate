@@ -19,6 +19,7 @@ interface AppActions {
   // Chat turns
   addTurn: (turn: ChatTurn) => void;
   updateTurn: (id: string, patch: Partial<ChatTurn>) => void;
+  removeTurn: (id: string) => void;
   clearTurns: () => void;
   addHistoryEntry: (entry: HistoryEntry) => void;
   clearHistory: () => void;
@@ -90,6 +91,7 @@ export const useAppStore = create<AppStore>()(
   setLoading: (loading) => set({ isLoading: loading }),
 
   addTurn: (turn) => set((state) => ({ chatTurns: [...state.chatTurns, turn] })),
+  removeTurn: (id) => set((state) => ({ chatTurns: state.chatTurns.filter((t) => t.id !== id) })),
   updateTurn: (id, patch) =>
     set((state) => ({
       chatTurns: state.chatTurns.map((t) => (t.id === id ? { ...t, ...patch } : t)),
@@ -238,7 +240,7 @@ export const useAppStore = create<AppStore>()(
       }
       const merged = Array.from(existing.values())
         .sort((a, b) => b.addedAt.localeCompare(a.addedAt))
-        .slice(0, 25); // cap at 25 facts
+        .slice(0, 100);
       return { userMemory: merged };
     }),
   removeMemoryFact: (fact) =>

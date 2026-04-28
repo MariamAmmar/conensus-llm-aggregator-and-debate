@@ -66,6 +66,7 @@ export function DebatePanel({ debateResult, result }: DebatePanelProps) {
 
   const winnerScore = scores.find((s) => s.provider === winner);
   const validResponses = responses.filter((r) => !r.error && r.content.trim());
+  const errorResponses = responses.filter((r) => r.error || !r.content.trim());
 
   return (
     <div className="space-y-4">
@@ -73,7 +74,10 @@ export function DebatePanel({ debateResult, result }: DebatePanelProps) {
       <div className="flex items-center gap-2">
         <div className="w-px h-4 bg-pink-500 rounded" />
         <span className="text-xs font-medium text-pink-400 uppercase tracking-wide">Debate Results</span>
-        <span className="text-xs text-zinc-600">— {responses.length} models participated</span>
+        <span className="text-xs text-zinc-600">— {validResponses.length}/{responses.length} models responded</span>
+        {errorResponses.length > 0 && (
+          <span className="text-xs text-red-500/70">{errorResponses.length} failed</span>
+        )}
       </div>
 
       {/* TL;DR summary */}
@@ -161,6 +165,9 @@ export function DebatePanel({ debateResult, result }: DebatePanelProps) {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 md:gap-3">
             {validResponses.map((response) => (
               <ResponseCard key={response.provider} response={response} collapsible />
+            ))}
+            {errorResponses.map((response) => (
+              <ResponseCard key={response.provider} response={response} />
             ))}
           </div>
 

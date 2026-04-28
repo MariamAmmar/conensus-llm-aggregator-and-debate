@@ -196,7 +196,7 @@ export async function POST(request: NextRequest) {
         else if (providerId === 'gemini') {
           const genAI = new GoogleGenerativeAI(process.env.GOOGLE_GEMINI_API_KEY!);
           const model = genAI.getGenerativeModel({
-            model: 'gemini-2.5-flash',
+            model: 'gemini-2.5-flash-preview-04-17',
             systemInstruction: systemPrompt,
             generationConfig: { maxOutputTokens: 800 },
           });

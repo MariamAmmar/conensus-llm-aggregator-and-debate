@@ -3,6 +3,7 @@
 import { useRef, useEffect, useState } from 'react';
 import { useAppStore } from '@/lib/store';
 import { useAuth } from '@/lib/auth';
+import { supabase } from '@/lib/supabase';
 import { getMockResult } from '@/lib/mock-data';
 import { Header } from '@/components/layout/Header';
 import { Sidebar } from '@/components/layout/Sidebar';
@@ -12,11 +13,12 @@ import { OutputPanel } from '@/components/output/OutputPanel';
 import { LoginModal } from '@/components/auth/LoginModal';
 import { TrialModal } from '@/components/auth/TrialModal';
 import { Sparkles, AlertCircle, CheckCircle, RotateCcw } from 'lucide-react';
-import type { HistoryEntry, AppResult, ChatTurn, AttachedImage, AttachedDocument } from '@/types';
+import type { HistoryEntry, AppResult, ChatTurn, AttachedImage, AttachedDocument, ModelResponse, ResponseScore, ProviderId, DebateResult } from '@/types';
 import { generateId } from '@/utils';
 import { DebateProgress } from '@/components/output/DebateProgress';
 import { FollowUpQuestions } from '@/components/output/FollowUpQuestions';
 import { MarkdownContent } from '@/components/output/MarkdownContent';
+import { ResponseCard } from '@/components/output/ResponseCard';
 
 const DEBATE_PROMPTS = [
   'Will AI take most jobs in the next 10 years?',
@@ -60,6 +62,7 @@ export default function Home() {
     setLoading,
     addTurn,
     updateTurn,
+    removeTurn,
     clearTurns,
     addHistoryEntry,
     addConversationTurn,
@@ -79,12 +82,20 @@ export default function Home() {
 
   const { user, session } = useAuth();
   const bottomRef = useRef<HTMLDivElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const urlCacheRef = useRef<Map<string, string>>(new Map());
   const [showLoginGate, setShowLoginGate] = useState(false);
   const [showTrialModal, setShowTrialModal] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState(false);
   const [streamingContent, setStreamingContent] = useState<Record<string, string>>({});
+  const [streamingDebate, setStreamingDebate] = useState<{
+    stage: 'collecting' | 'scoring' | 'synthesizing';
+    responses: ModelResponse[];
+    synthesisContent: string;
+  } | null>(null);
   const [scrapingUrls, setScrapingUrls] = useState(false);
+  const [loadingFollowups, setLoadingFollowups] = useState<Set<string>>(new Set());
   // Pick a new funny prompt on each page load (after hydration to avoid SSR mismatch)
   const [rotatingPrompt, setRotatingPrompt] = useState(ROTATING_PROMPTS[0]);
   const [debatePrompts, setDebatePrompts] = useState(() => DEBATE_PROMPTS.slice(0, 4));
@@ -99,8 +110,24 @@ export default function Home() {
   useEffect(() => {
     if (user?.id && chatTurns.length > 0) saveSession();
     syncSessionsFromDB();
+
+    // Restore memory from Supabase user account on login
+    if (user?.id) {
+      const saved = user.user_metadata?.memory_facts as import('@/types').MemoryFact[] | undefined;
+      if (Array.isArray(saved) && saved.length > 0) mergeMemoryFacts(saved);
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+  // Sync memory to Supabase whenever it changes (debounced, logged-in only)
+  useEffect(() => {
+    if (!user?.id || userMemory.length === 0) return;
+    const t = setTimeout(() => {
+      supabase.auth.updateUser({ data: { memory_facts: userMemory } }).catch(() => {});
+    }, 2000);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userMemory, user?.id]);
 
   // Auto-save current session whenever chatTurns changes (after each completed turn)
   useEffect(() => {
@@ -124,6 +151,15 @@ export default function Home() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatTurns]);
 
+  // Keep the response in view as it streams in — only auto-advances if the user is near the bottom
+  useEffect(() => {
+    const el = mainRef.current;
+    if (!el) return;
+    if (el.scrollHeight - el.scrollTop - el.clientHeight < 150) {
+      el.scrollTop = el.scrollHeight;
+    }
+  }, [streamingContent, streamingDebate?.synthesisContent]);
+
   // Handle Stripe redirect back
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -143,16 +179,29 @@ export default function Home() {
       .then((r) => r.json()).then(({ facts }) => { if (facts?.length) mergeMemoryFacts(facts); }).catch(() => {});
 
     // Follow-up questions
+    setLoadingFollowups((prev) => new Set([...prev, turnId]));
     fetch('/api/followup', body({ prompt: userPrompt, response: assistantResponse }))
-      .then((r) => r.json()).then(({ questions }) => { if (questions?.length) updateTurn(turnId, { followupQuestions: questions }); }).catch(() => {});
+      .then((r) => r.json())
+      .then(({ questions }) => { if (questions?.length) updateTurn(turnId, { followupQuestions: questions }); })
+      .catch(() => {})
+      .finally(() => setLoadingFollowups((prev) => { const next = new Set(prev); next.delete(turnId); return next; }));
 
     // Fact-check (single/auto responses only — skip debate/all/image)
     fetch('/api/factcheck', body({ response: assistantResponse }))
       .then((r) => r.json()).then((fc) => { if (fc) updateTurn(turnId, { factCheck: fc }); }).catch(() => {});
 
-    // Title agent — only on first turn of a new session
-    if (isFirstTurn) {
-      fetch('/api/title', body({ prompt: userPrompt }))
+    // Title agent — runs on turn 1 (initial title) and every 3 turns (topic-aware refresh)
+    // Uses all prompts so far so the title reflects the full conversation, not just the opener.
+    // Works for both logged-in and anonymous users — title is persisted with the session.
+    const allTurns = useAppStore.getState().chatTurns;
+    const completedCount = allTurns.filter((t) => !t.loading).length;
+    const shouldRetitle = isFirstTurn || completedCount % 3 === 0;
+    if (shouldRetitle) {
+      const prompts = allTurns
+        .filter((t) => t.prompt?.trim())
+        .map((t) => t.prompt);
+      if (userPrompt.trim() && !prompts.includes(userPrompt)) prompts.push(userPrompt);
+      fetch('/api/title', body({ prompts }))
         .then((r) => r.json()).then(({ title }) => { if (title) setSessionTitle(title); }).catch(() => {});
     }
   }
@@ -170,19 +219,30 @@ export default function Home() {
   async function handleSubmit(submittedPrompt: string, images: AttachedImage[], documents: AttachedDocument[]) {
     if (!submittedPrompt.trim() || isLoading) return;
 
-    // Detect URLs and scrape them before sending
-    const urlMatches = submittedPrompt.match(/https?:\/\/[^\s)>\]"']+/g) ?? [];
-    if (urlMatches.length > 0) {
-      setScrapingUrls(true);
+    // Scrape URLs from the user's prompt (explicit) + any URLs the AI mentioned in its last response
+    // (so models can "follow" links they previously cited without the user having to copy/paste them)
+    const promptUrls: string[] = submittedPrompt.match(/https?:\/\/[^\s)>\]"']+/g) ?? [];
+    const lastAiTurn = [...conversation].reverse().find((t) => t.role === 'assistant');
+    const historyUrls = lastAiTurn
+      ? (lastAiTurn.content.match(/https?:\/\/[^\s)>\]"']+/g) ?? []).filter((u) => !promptUrls.includes(u))
+      : [];
+    const allUrls = [...new Set([...promptUrls, ...historyUrls])].slice(0, 5);
+
+    if (allUrls.length > 0) {
+      if (promptUrls.length > 0) setScrapingUrls(true);
       const scraped = await Promise.all(
-        urlMatches.slice(0, 3).map((url) =>
-          fetch('/api/scrape', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) })
-            .then((r) => r.json()).catch(() => null),
-        ),
+        allUrls.map(async (url) => {
+          const cached = urlCacheRef.current.get(url);
+          if (cached !== undefined) return { url, content: cached };
+          const data = await fetch('/api/scrape', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ url }) })
+            .then((r) => r.json()).catch(() => null);
+          if (data?.content) urlCacheRef.current.set(url, data.content as string);
+          return data?.content ? { url, content: data.content as string } : null;
+        }),
       );
       setScrapingUrls(false);
       const context = scraped
-        .filter((s) => s?.content)
+        .filter((s): s is { url: string; content: string } => s !== null && !!s.content)
         .map((s) => `<webpage url="${s.url}">\n${s.content}\n</webpage>`)
         .join('\n\n');
       if (context) submittedPrompt = `${context}\n\n${submittedPrompt}`;
@@ -225,10 +285,107 @@ export default function Home() {
         const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (session?.access_token) headers['Authorization'] = `Bearer ${session.access_token}`;
 
-        // Streaming: single-model and auto modes (not debate/all/image/multi-select)
+        // Streaming: single-model and auto modes (not all/image/multi-select)
         const canStream = selectedMode !== 'debate' && selectedMode !== 'all' && selectedMode !== 'image' && selectedModels.length <= 1;
 
-        if (canStream) {
+        if (selectedMode === 'debate') {
+          // ── Streaming debate ─────────────────────────────────────────────────
+          const debateStart = Date.now();
+          setStreamingDebate({ stage: 'collecting', responses: [], synthesisContent: '' });
+
+          const res = await fetch('/api/debate/stream', {
+            method: 'POST', headers, signal: abortRef.current.signal,
+            body: JSON.stringify({ prompt: submittedPrompt, history: debateConversation, userMemory: userMemory.map((f) => f.fact), userPreferences }),
+          });
+
+          if (!res.ok) {
+            const data = await res.json();
+            if (res.status === 429 && data.code === 'LIMIT_REACHED') { updateTurn(turnId, { loading: false, error: null }); setLoading(false); setShowLoginGate(true); setStreamingDebate(null); return; }
+            if (res.status === 402 && data.code === 'SUBSCRIPTION_REQUIRED') { updateTurn(turnId, { loading: false, error: null }); setLoading(false); setShowTrialModal(true); setStreamingDebate(null); return; }
+            throw new Error(data.message || data.error || 'Request failed');
+          }
+
+          const reader = res.body!.getReader();
+          const decoder = new TextDecoder();
+          let buf = '';
+
+          // Local accumulator (avoids React stale-closure issues)
+          const acc = {
+            responses: [] as ModelResponse[],
+            scores: [] as ResponseScore[],
+            winner: null as ProviderId | null,
+            synthesisContent: '',
+            synthesizedAnswer: '',  // server's authoritative final answer (includes its own fallback)
+            summary: '',
+            synthesisReasoning: '',
+          };
+
+          outer: while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += decoder.decode(value, { stream: true });
+            const parts = buf.split('\n\n');
+            buf = parts.pop() ?? '';
+
+            for (const part of parts) {
+              if (!part.startsWith('data: ')) continue;
+              const msg = JSON.parse(part.slice(6));
+
+              if (msg.type === 'error') throw new Error(msg.message);
+
+              if (msg.type === 'stage') {
+                setStreamingDebate((prev) => prev ? { ...prev, stage: msg.stage } : null);
+              } else if (msg.type === 'response') {
+                acc.responses.push(msg as ModelResponse);
+                setStreamingDebate((prev) => prev ? { ...prev, responses: [...acc.responses] } : null);
+              } else if (msg.type === 'scores') {
+                acc.scores = msg.scores as ResponseScore[];
+                acc.winner = msg.winner as ProviderId;
+              } else if (msg.type === 'synthesis_chunk') {
+                acc.synthesisContent += msg.text as string;
+                setStreamingDebate((prev) => prev ? { ...prev, synthesisContent: acc.synthesisContent } : null);
+              } else if (msg.type === 'done') {
+                acc.summary = (msg.summary as string) ?? '';
+                acc.synthesisReasoning = (msg.synthesisReasoning as string) ?? '';
+                acc.synthesizedAnswer = (msg.synthesizedAnswer as string) ?? '';
+                if (Array.isArray(msg.allResponses)) acc.responses = msg.allResponses as ModelResponse[];
+                if (Array.isArray(msg.scores)) acc.scores = msg.scores as ResponseScore[];
+                if (msg.winner) acc.winner = msg.winner as ProviderId;
+                break outer;
+              }
+            }
+          }
+
+          if (!acc.winner) throw new Error('Debate did not complete successfully.');
+
+          const debateResult: DebateResult = {
+            responses: acc.responses,
+            critiques: [],
+            scores: acc.scores,
+            winner: acc.winner,
+            synthesizedAnswer: acc.synthesisContent || acc.synthesizedAnswer || (acc.responses.find((r) => r.provider === acc.winner)?.content ?? ''),
+            synthesisReasoning: acc.synthesisReasoning,
+            summary: acc.summary,
+          };
+
+          const result: AppResult = {
+            id: turnId, prompt: submittedPrompt, mode: 'debate',
+            routerDecision: null,
+            responses: acc.responses,
+            debateResult,
+            finalAnswer: debateResult.synthesizedAnswer,
+            imageResult: null,
+            timestamp: new Date(),
+            durationMs: Date.now() - debateStart,
+          };
+
+          updateTurn(turnId, { result, loading: false });
+          setStreamingDebate(null);
+          addConversationTurn(submittedPrompt, debateResult.synthesizedAnswer);
+          addHistoryEntry({ id: turnId, prompt: submittedPrompt, mode: 'debate', finalAnswer: debateResult.synthesizedAnswer, timestamp: new Date() });
+          runPostTurnAgents(turnId, submittedPrompt, debateResult.synthesizedAnswer, chatTurns.length === 0);
+
+        } else if (canStream) {
           const streamStart = Date.now();
           const res = await fetch('/api/chat/stream', {
             method: 'POST', headers, signal: abortRef.current.signal,
@@ -281,7 +438,7 @@ export default function Home() {
             }
           }
         } else {
-          // Non-streaming: debate, all-models, image, multi-select
+          // Non-streaming: all-models, image, multi-select
           const res = await fetch('/api/chat', {
             method: 'POST', headers, signal: abortRef.current.signal,
             body: JSON.stringify({ prompt: submittedPrompt, mode: selectedMode, imageProvider: selectedImageProvider, history: conversation, providerConversations, debateConversation, images, documents, userMemory: userMemory.map((f) => f.fact), userPreferences, selectedModels }),
@@ -315,6 +472,7 @@ export default function Home() {
       });
     } finally {
       setLoading(false);
+      setStreamingDebate(null);
       abortRef.current = null;
     }
   }
@@ -421,7 +579,7 @@ export default function Home() {
         ) : (
           /* ── Active conversation: messages scroll, input fixed at bottom ── */
           <>
-            <main className="flex-1 overflow-y-auto">
+            <main className="flex-1 overflow-y-auto" ref={mainRef}>
               <div className="max-w-3xl mx-auto px-4 py-6 space-y-8">
                 {chatTurns.map((turn) => (
                   <div key={turn.id} className="space-y-4">
@@ -462,7 +620,27 @@ export default function Home() {
                           <span className="inline-block w-0.5 h-4 bg-indigo-400 animate-pulse ml-0.5 -mb-0.5" />
                         </div>
                       ) : turn.mode === 'debate' ? (
-                        <DebateProgress />
+                        <DebateProgress
+                          stage={streamingDebate?.stage ?? 'collecting'}
+                          responses={streamingDebate?.responses ?? []}
+                          synthesisContent={streamingDebate?.synthesisContent ?? ''}
+                        />
+                      ) : turn.mode === 'all' ? (
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2 text-xs text-zinc-500">
+                            <div className="w-3 h-3 border border-violet-500 border-t-transparent rounded-full animate-spin shrink-0" />
+                            Querying 8 models in parallel…
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {(['openai', 'anthropic', 'gemini', 'perplexity', 'grok', 'llama', 'o4mini', 'deepseek'] as const).map((provider) => (
+                              <ResponseCard
+                                key={provider}
+                                response={{ provider, content: '', latencyMs: 0, isGrounded: false }}
+                                isLoading
+                              />
+                            ))}
+                          </div>
+                        </div>
                       ) : (
                         <div className="flex items-center gap-3 py-2">
                           <div className="relative w-8 h-8 shrink-0">
@@ -470,9 +648,11 @@ export default function Home() {
                             <div className="absolute inset-0 rounded-full border-2 border-t-indigo-500 animate-spin" />
                           </div>
                           <p className="text-zinc-400 text-sm">
-                            {turn.mode === 'image' ? 'Generating image...'
-                              : turn.mode === 'all' ? 'Querying all models...'
-                              : 'Thinking...'}
+                            {turn.mode === 'image' ? 'Generating image…'
+                              : turn.mode === 'auto' ? 'Finding the best model…'
+                              : turn.mode === 'perplexity' ? 'Searching the web…'
+                              : turn.mode === 'o4mini' || turn.mode === 'deepseek' ? 'Reasoning…'
+                              : 'Thinking…'}
                           </p>
                         </div>
                       )
@@ -482,7 +662,26 @@ export default function Home() {
                     {turn.error && (
                       <div className="flex items-start gap-3 px-4 py-3 rounded-xl border border-red-500/30 bg-red-500/10">
                         <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
-                        <p className="text-sm text-red-400">{turn.error}</p>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-red-400">{turn.error}</p>
+                          <div className="mt-2 flex items-center gap-3">
+                            <button
+                              onClick={() => handleSubmit(turn.prompt, turn.images ?? [], turn.documents ?? [])}
+                              disabled={isLoading}
+                              className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors disabled:opacity-40"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                              Try again
+                            </button>
+                            <button
+                              onClick={() => { removeTurn(turn.id); setPrompt(turn.prompt); }}
+                              disabled={isLoading}
+                              className="inline-flex items-center gap-1.5 text-xs text-zinc-500 hover:text-zinc-300 transition-colors disabled:opacity-40"
+                            >
+                              Edit prompt
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     )}
 
@@ -499,6 +698,15 @@ export default function Home() {
                             {turn.factCheck.flags.length > 0 && (
                               <span className="text-zinc-600">· {turn.factCheck.flags[0]}</span>
                             )}
+                          </div>
+                        )}
+
+                        {/* Follow-up question skeleton while loading */}
+                        {!turn.followupQuestions && loadingFollowups.has(turn.id) && (
+                          <div className="flex gap-2 flex-wrap">
+                            {[108, 148, 122].map((w, i) => (
+                              <div key={i} className="h-7 rounded-full skeleton" style={{ width: `${w}px` }} />
+                            ))}
                           </div>
                         )}
 

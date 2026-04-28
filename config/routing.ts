@@ -23,8 +23,8 @@ export const ROUTING_RULES: Record<PromptCategory, RoutingRule> = {
   },
   logic: {
     category: 'logic',
-    primaryModel: 'anthropic',
-    fallbackModel: 'openai',
+    primaryModel: 'o4mini',
+    fallbackModel: 'anthropic',
     requiresWebGrounding: false,
     requiresImageGeneration: false,
     confidenceThreshold: 0.65,
@@ -59,7 +59,7 @@ export const ROUTING_RULES: Record<PromptCategory, RoutingRule> = {
   },
   general: {
     category: 'general',
-    primaryModel: 'anthropic',
+    primaryModel: 'openai',
     fallbackModel: 'gemini',
     requiresWebGrounding: false,
     requiresImageGeneration: false,

@@ -15,7 +15,7 @@ const MODELS: Record<ComputeTier, string> = {
   heavy:    'sonar-pro',
 };
 
-const TIMEOUT_MS = 30_000;
+const TIMEOUT_MS = 45_000; // web search takes longer than pure LLM calls
 
 function getClient() {
   const apiKey = process.env.PERPLEXITY_API_KEY;

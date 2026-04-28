@@ -5,14 +5,14 @@ import { MODEL_CONFIGS } from '@/config/models';
 import { classifyPrompt } from './classifier';
 
 const PROVIDER_DESCRIPTIONS = `
-- openai (GPT-4o): creative writing, general questions, broad knowledge, conversation
-- anthropic (Claude): complex reasoning, analysis, coding, long documents, nuanced thinking
-- gemini (Gemini 2.5 Flash): multimodal tasks, Google knowledge, fast general queries
-- perplexity (Sonar Pro): real-time web search, current events, news, live data, citations needed
-- grok (Grok-3): X/Twitter topics, pop culture, humor, edgy or controversial questions, breaking news
-- llama (Llama 4): fast simple questions, open-source topics, lightweight tasks
-- o4mini (o4-mini): math, logic puzzles, step-by-step reasoning, structured problems
-- deepseek (DeepSeek R1): deep chain-of-thought reasoning, technical problems, scientific questions
+- openai (GPT-4o): general conversation, broad factual knowledge, summarization, coding, everyday questions
+- anthropic (Claude): long-form document analysis, contract or legal review, safety-sensitive topics, nuanced multi-step instructions, dense technical writing
+- gemini (Gemini 2.5 Flash): multimodal image+text tasks, Google product questions, multilingual queries, fast factual lookups
+- perplexity (Sonar Pro): real-time web search, current events, live data, news, anything requiring citations
+- grok (Grok-3): X/Twitter topics, social media trends, humor, edgy or controversial questions, breaking news
+- llama (Llama 4): short simple questions, open-source software topics, lightweight or casual tasks
+- o4mini (o4-mini): math, formal logic, step-by-step reasoning, structured proofs, puzzles, code debugging
+- deepseek (DeepSeek R1): scientific research, deep technical problems, complex chain-of-thought over long contexts
 `.trim();
 
 let client: OpenAI | null = null;
@@ -73,8 +73,8 @@ Respond with ONLY valid JSON — no markdown, no explanation:
 
     // Map provider back to a category for the rule lookup
     const providerToCategory: Partial<Record<ProviderId, string>> = {
-      perplexity: 'research', anthropic: 'logic', o4mini: 'logic',
-      deepseek: 'logic', openai: 'writing', grok: 'general',
+      perplexity: 'research', o4mini: 'logic', deepseek: 'logic',
+      openai: 'writing', anthropic: 'writing', grok: 'general',
       gemini: 'general', llama: 'general',
     };
     const category = (providerToCategory[providerId] ?? 'general') as keyof typeof ROUTING_RULES;

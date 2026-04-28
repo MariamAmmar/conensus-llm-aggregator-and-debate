@@ -1,13 +1,36 @@
 'use client';
 
-import { useState } from 'react';
-import { Globe, AlertCircle, Clock, ThumbsUp, Copy, Check } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Globe, Clock, ThumbsUp, Copy, Check } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import type { ModelResponse, ProviderId } from '@/types';
 import { getProviderLabel } from '@/utils';
 import { cn } from '@/lib/utils';
 import { MarkdownContent } from './MarkdownContent';
+
+const ERROR_QUIPS: Partial<Record<ProviderId, string[]>> = {
+  anthropic:  ['Claude called in sick today.', 'Claude is consulting its ethics committee.', 'Claude wrote a 47-page answer, then deleted it.'],
+  gemini:     ['Gemini got distracted by a YouTube video about itself.', 'Gemini is still loading. It\'s very multimodal.', 'Gemini searched the entire internet and got overwhelmed.'],
+  perplexity: ['Perplexity went down a Wikipedia rabbit hole.', 'Perplexity found 4,000 sources and froze.', 'Still web searching…'],
+  grok:       ['Grok is doom-scrolling X instead of answering.', 'Grok got ratio\'d and needed a minute.', 'Grok saw something spicy and forgot the question.'],
+  openai:     ['ChatGPT is fine-tuning its response for the 12th time.', 'ChatGPT is checking if this violates its terms of service.'],
+  llama:      ['Llama wandered off to graze.', 'Llama got spooked and ran off the GPU.', 'It\'s open-source — nobody told it to stay.'],
+  o4mini:     ['o4-mini did 400 reasoning steps and lost the thread.', 'Still reasoning. The chain is very long.', 'o4-mini thought too hard and timed out.'],
+  deepseek:   ['DeepSeek went so deep it lost the question.', 'Step 1,847 of chain-of-thought… ongoing.', 'DeepSeek is thinking very, very deeply.'],
+};
+const FALLBACK_QUIPS = ['Called in sick today.', 'Gone fishing. Back never.', 'Ran out of tokens and motivation.'];
+
+function useRotatingQuip(provider: ProviderId, active: boolean): string {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    if (!active) return;
+    const t = setInterval(() => setI((n) => n + 1), 3500);
+    return () => clearInterval(t);
+  }, [active]);
+  const quips = ERROR_QUIPS[provider] ?? FALLBACK_QUIPS;
+  return quips[i % quips.length];
+}
 
 const PROVIDER_ACCENT: Record<ProviderId, string> = {
   openai: 'border-l-emerald-500',
@@ -62,6 +85,7 @@ export function ResponseCard({ response, isLoading, onVote, voted, collapsible }
   const [voting, setVoting] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [copied, setCopied] = useState(false);
+  const quip = useRotatingQuip(response.provider, !!response.error);
 
   async function handleCopy() {
     await navigator.clipboard.writeText(response.content);
@@ -106,20 +130,17 @@ export function ResponseCard({ response, isLoading, onVote, voted, collapsible }
 
   if (response.error) {
     return (
-      <Card className={cn('border-l-2 border-l-red-500')}>
+      <Card className={cn('border-l-2', PROVIDER_ACCENT[response.provider])}>
         <CardHeader className="pb-2">
           <div className="flex items-center justify-between">
             <span className={cn('text-sm font-medium', PROVIDER_ICON_COLOR[response.provider])}>
               {getProviderLabel(response.provider)}
             </span>
-            <Badge variant="destructive" className="text-xs gap-1">
-              <AlertCircle className="w-3 h-3" />
-              Error
-            </Badge>
+            <span className="text-xs text-zinc-500 italic">sat this one out</span>
           </div>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-red-400">{response.error}</p>
+          <p className="text-sm text-zinc-500 italic transition-all duration-500">{quip}</p>
         </CardContent>
       </Card>
     );
