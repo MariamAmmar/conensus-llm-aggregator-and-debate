@@ -121,6 +121,11 @@ export default function Home() {
     if (user?.id) {
       const saved = user.user_metadata?.memory_facts as import('@/types').MemoryFact[] | undefined;
       if (Array.isArray(saved) && saved.length > 0) mergeMemoryFacts(saved);
+      // Shrink any previously bloated JWT immediately — don't wait for the debounced sync
+      const currentMemory = useAppStore.getState().userMemory;
+      if (currentMemory.length > 0) {
+        supabase.auth.updateUser({ data: { memory_facts: currentMemory.slice(0, 15) } }).catch(() => {});
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
@@ -135,11 +140,14 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatTurns]);
 
-  // Sync memory to Supabase whenever it changes (debounced, logged-in only)
+  // Sync memory to Supabase whenever it changes (debounced, logged-in only).
+  // Only write the 15 most recent facts into user_metadata — the full list lives in
+  // localStorage (Zustand persist). Storing all 100 facts in user_metadata bloats the
+  // JWT to 30-35KB, which makes every Authorization header exceed Node's size limit (431).
   useEffect(() => {
     if (!user?.id || userMemory.length === 0) return;
     const t = setTimeout(() => {
-      supabase.auth.updateUser({ data: { memory_facts: userMemory } }).catch(() => {});
+      supabase.auth.updateUser({ data: { memory_facts: userMemory.slice(0, 15) } }).catch(() => {});
     }, 2000);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
