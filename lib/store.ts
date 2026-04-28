@@ -28,6 +28,7 @@ interface AppActions {
   loadSession: (id: string) => void;
   deleteSession: (id: string) => void;
   syncSessionsFromDB: () => Promise<void>;
+  syncLocalSessionsToDB: (token: string) => void;
   // Memory
   mergeMemoryFacts: (facts: MemoryFact[]) => void;
   removeMemoryFact: (fact: string) => void;
@@ -55,7 +56,7 @@ const isMockMode = process.env.NEXT_PUBLIC_MOCK_MODE === 'true';
 
 export const useAppStore = create<AppStore>()(
   persist(
-    (set) => ({
+    (set, get) => ({
   // Initial state
   selectedMode: 'auto',
   selectedModels: ['chatgpt'] as ModelMode[],
@@ -107,11 +108,13 @@ export const useAppStore = create<AppStore>()(
   saveSession: () =>
     set((state) => {
       if (state.chatTurns.length === 0) return {};
-      // Reuse stable ID so repeated saves update rather than duplicate
       const id = state.activeSessionId ?? generateId();
+      // Use the AI-generated title if already set, otherwise fall back to the raw first prompt
+      const existingSession = state.sessions.find((s) => s.id === id);
+      const title = existingSession?.title ?? state.chatTurns[0].prompt;
       const session: ChatSession = {
         id,
-        title: state.chatTurns[0].prompt,
+        title,
         timestamp: state.chatTurns[0].result?.timestamp ?? new Date(),
         mode: state.chatTurns[0].mode,
         turns: state.chatTurns,
@@ -119,15 +122,13 @@ export const useAppStore = create<AppStore>()(
         providerConversations: state.providerConversations,
         debateConversation: state.debateConversation,
       };
-      // Sync to Supabase in background (don't block UI)
       getAuthHeader().then((authHeader) => {
         fetch('/api/sessions', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', ...authHeader },
           body: JSON.stringify(session),
-        }).catch(() => {});
+        }).catch((e) => console.warn('[sessions] save failed', e));
       });
-      // Upsert into sessions list
       const exists = state.sessions.some((s) => s.id === id);
       const sessions = exists
         ? state.sessions.map((s) => (s.id === id ? session : s))
@@ -157,7 +158,7 @@ export const useAppStore = create<AppStore>()(
       const res = await fetch('/api/sessions', { headers: authHeader });
       if (!res.ok) return;
       const dbSessions: ChatSession[] = await res.json();
-      // Merge: keep local sessions not yet in DB (e.g. anon turns before login)
+      // Merge: DB is authoritative; keep local-only sessions not yet uploaded
       set((state) => {
         const dbIds = new Set(dbSessions.map((s) => s.id));
         const localOnly = state.sessions.filter((s) => !dbIds.has(s.id));
@@ -168,14 +169,44 @@ export const useAppStore = create<AppStore>()(
     }
   },
 
+  // Re-upload every local session to DB using a known-good token (call on login)
+  syncLocalSessionsToDB: (token: string) => {
+    const sessions = get().sessions;
+    if (sessions.length === 0) return;
+    const authHeader = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+    sessions.forEach((session) => {
+      fetch('/api/sessions', {
+        method: 'POST',
+        headers: authHeader,
+        body: JSON.stringify(session),
+      }).catch((e) => console.warn('[sessions] re-upload failed', e));
+    });
+  },
+
   setSessionTitle: (title) =>
     set((state) => {
-      if (!state.activeSessionId) return {};
-      return {
-        sessions: state.sessions.map((s) =>
-          s.id === state.activeSessionId ? { ...s, title } : s,
-        ),
+      if (!state.activeSessionId || state.chatTurns.length === 0) return {};
+      const id = state.activeSessionId;
+      const sessions = state.sessions.map((s) => (s.id === id ? { ...s, title } : s));
+      // Push the AI-generated title to DB immediately
+      const sessionToSave: ChatSession = {
+        id,
+        title,
+        timestamp: state.chatTurns[0].result?.timestamp ?? new Date(),
+        mode: state.chatTurns[0].mode,
+        turns: state.chatTurns,
+        conversation: state.conversation,
+        providerConversations: state.providerConversations,
+        debateConversation: state.debateConversation,
       };
+      getAuthHeader().then((authHeader) => {
+        fetch('/api/sessions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...authHeader },
+          body: JSON.stringify(sessionToSave),
+        }).catch((e) => console.warn('[sessions] title save failed', e));
+      });
+      return { sessions };
     }),
 
   addConversationTurn: (userPrompt, assistantResponse) =>
@@ -261,6 +292,7 @@ export const useAppStore = create<AppStore>()(
         activeSessionId: state.activeSessionId,
         history: state.history,
         userMemory: state.userMemory,
+        userPreferences: state.userPreferences,
       }),
     },
   ),

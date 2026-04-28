@@ -74,6 +74,7 @@ export default function Home() {
     setPrompt,
     saveSession,
     syncSessionsFromDB,
+    syncLocalSessionsToDB,
     userMemory,
     userPreferences,
     mergeMemoryFacts,
@@ -106,10 +107,15 @@ export default function Home() {
   }, []);
 
   // Sync sessions on load and whenever auth state changes (login/logout)
-  // Also save current in-progress chat so it merges into the account on login
   useEffect(() => {
     if (user?.id && chatTurns.length > 0) saveSession();
     syncSessionsFromDB();
+
+    // On login: re-upload all locally stored sessions so they're associated with this account.
+    // This catches sessions saved anonymously or while the auth token was expired.
+    if (user?.id && session?.access_token) {
+      syncLocalSessionsToDB(session.access_token);
+    }
 
     // Restore memory from Supabase user account on login
     if (user?.id) {
@@ -118,6 +124,16 @@ export default function Home() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
+
+  // Re-save whenever the tab becomes visible again (catches saves missed while tab was hidden)
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden && chatTurns.some((t) => !t.loading)) saveSession();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chatTurns]);
 
   // Sync memory to Supabase whenever it changes (debounced, logged-in only)
   useEffect(() => {
@@ -223,7 +239,9 @@ export default function Home() {
     // (so models can "follow" links they previously cited without the user having to copy/paste them)
     const promptUrls: string[] = submittedPrompt.match(/https?:\/\/[^\s)>\]"']+/g) ?? [];
     const lastAiTurn = [...conversation].reverse().find((t) => t.role === 'assistant');
-    const historyUrls = lastAiTurn
+    // Debate sends to 8 models in parallel — skip history URL injection to keep the request lean
+    // (Perplexity in the debate already covers web access)
+    const historyUrls = selectedMode !== 'debate' && lastAiTurn
       ? (lastAiTurn.content.match(/https?:\/\/[^\s)>\]"']+/g) ?? []).filter((u) => !promptUrls.includes(u))
       : [];
     const allUrls = [...new Set([...promptUrls, ...historyUrls])].slice(0, 5);
