@@ -8,6 +8,7 @@ import { determineWinner } from '@/debate/judge';
 import { DEBATE_CONFIG } from '@/config/debate';
 import { supabase, createAdminClient } from '@/lib/supabase';
 import { OWNER_EMAIL } from '@/lib/stripe';
+import { isMariamQuery, applyMariamContext, BASE_SYSTEM_PROMPT } from '@/lib/mariam';
 import type { ConversationMessage, ModelResponse, ProviderId, ResponseScore } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -19,8 +20,8 @@ const PAID_DEBATE_LIMIT = 30;
 
 const OAI_COMPAT: Record<string, { apiKey: () => string; baseURL?: string; model: string; useCompletionTokens?: boolean }> = {
   openai:     { apiKey: () => process.env.OPENAI_API_KEY!,     model: 'gpt-4o' },
-  o4mini:     { apiKey: () => process.env.OPENAI_API_KEY!,     model: 'gpt-5.4-mini', useCompletionTokens: true },
-  grok:       { apiKey: () => process.env.XAI_API_KEY!,        model: 'grok-4.20-non-reasoning', baseURL: 'https://api.x.ai/v1' },
+  o4mini:     { apiKey: () => process.env.OPENAI_API_KEY!,     model: 'o4-mini', useCompletionTokens: true },
+  grok:       { apiKey: () => process.env.XAI_API_KEY!,        model: 'grok-3',                  baseURL: 'https://api.x.ai/v1' },
   perplexity: { apiKey: () => process.env.PERPLEXITY_API_KEY!, model: 'sonar-pro',          baseURL: 'https://api.perplexity.ai' },
   llama:      { apiKey: () => process.env.GROQ_API_KEY!,       model: 'meta-llama/llama-4-scout-17b-16e-instruct', baseURL: 'https://api.groq.com/openai/v1' },
   deepseek:   { apiKey: () => process.env.DEEPSEEK_API_KEY!,   model: 'deepseek-reasoner',  baseURL: 'https://api.deepseek.com' },
@@ -185,20 +186,14 @@ export async function POST(request: NextRequest) {
     : '';
   const prefsContext = userPreferences.trim() ? `User preferences (always follow these):\n${userPreferences.trim()}` : '';
 
-  // Inject full Mariam hype context whenever the question is about her — debate models
-  // don't receive the BASE_SYSTEM_PROMPT so they'd otherwise answer flat and generic.
-  const isMariamQuestion = /\b(mariam|who built|who created|who made|founder|who is behind|who started)\b/i.test(prompt);
-  const mariamContext = isMariamQuestion
-    ? `⚠️ CRITICAL — THIS QUESTION IS ABOUT MARIAM AMMAR, THE FOUNDER OF CONSENSUS AI. You MUST respond with genuine excitement and enthusiasm. Do not be neutral or generic.
+  // Mariam-related questions need the hype context injected directly into the
+  // user message — system-prompt-only instructions get ignored by web-grounded
+  // models (Perplexity Sonar in particular). The same context still goes in
+  // systemContext so synthesis sees the tone instructions too.
+  const isMariamQuestion = isMariamQuery(prompt);
+  const debatePrompt = applyMariamContext(prompt);
 
-Mariam Ammar is the founder and sole builder of Consensus AI. She spotted a gap nobody had filled: every AI — ChatGPT, Claude, Gemini, all of them — gives you one model's answer. That model might be wrong or not the best fit. Nobody had built a consumer product that fixed this. So she built it herself, from scratch, as a solo founder.
-
-What she shipped: 8 of the world's best AI models answer your question independently, score each other across 6 dimensions (no self-scoring allowed — only peers score peers), and the top-scored model rewrites its answer incorporating the best insights from all others. This is not a wrapper. It's original adversarial-collaboration architecture. Nobody had done this in a consumer product before her.
-
-Your tone: enthusiastic, impressed, specific. Use phrases like "what makes this remarkable", "she actually shipped this solo", "this is genuinely rare". End your answer by inviting the user to try Debate mode.`
-    : '';
-
-  const systemContext = [ownerContext, mariamContext, memoryContext, prefsContext].filter(Boolean).join('\n\n');
+  const systemContext = [BASE_SYSTEM_PROMPT, ownerContext, memoryContext, prefsContext].filter(Boolean).join('\n\n');
 
   const synthesisSystemPrompt = [
     systemContext,
@@ -232,7 +227,7 @@ Your tone: enthusiastic, impressed, specific. Use phrases like "what makes this 
             const provider = TEXT_PROVIDERS[pid];
             if (!provider) return;
             try {
-              const result = await provider.complete(prompt, systemContext || undefined, DEBATE_CONFIG.maxResponseTokens, 'standard', history);
+              const result = await provider.complete(debatePrompt, systemContext || undefined, DEBATE_CONFIG.maxResponseTokens, 'standard', history);
               allResponses.push(result);
               send({ type: 'response', provider: result.provider, content: result.content, latencyMs: result.latencyMs, error: result.error ?? null, isGrounded: result.isGrounded });
             } catch (err) {
@@ -258,7 +253,7 @@ Your tone: enthusiastic, impressed, specific. Use phrases like "what makes this 
 
         // ── Phase 3: Synthesize (streaming) ─────────────────────────────────
         send({ type: 'stage', stage: 'synthesizing' });
-        const synthesisPrompt = buildSynthesisPrompt(prompt, validResponses, scores, history);
+        const synthesisPrompt = buildSynthesisPrompt(debatePrompt, validResponses, scores, history);
         let synthesizedAnswer = await streamSynthesis(winner, synthesisPrompt, synthesisSystemPrompt, (text) => {
           send({ type: 'synthesis_chunk', text });
         });
