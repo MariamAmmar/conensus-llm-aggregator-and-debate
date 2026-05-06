@@ -76,6 +76,7 @@ export default function Home() {
     saveSession,
     syncSessionsFromDB,
     syncLocalSessionsToDB,
+    claimIpSessions,
     userMemory,
     userPreferences,
     mergeMemoryFacts,
@@ -115,9 +116,9 @@ export default function Home() {
     if (user?.id && chatTurns.length > 0) saveSession();
     syncSessionsFromDB();
 
-    // On login: re-upload all locally stored sessions so they're associated with this account.
-    // This catches sessions saved anonymously or while the auth token was expired.
+    // On login: claim any pre-login sessions from this IP, then re-upload local sessions.
     if (user?.id && session?.access_token) {
+      claimIpSessions(session.access_token);
       syncLocalSessionsToDB(session.access_token);
     }
 

@@ -29,6 +29,7 @@ interface AppActions {
   deleteSession: (id: string) => void;
   syncSessionsFromDB: () => Promise<void>;
   syncLocalSessionsToDB: (token: string) => void;
+  claimIpSessions: (token: string) => Promise<void>;
   // Memory
   mergeMemoryFacts: (facts: MemoryFact[]) => void;
   removeMemoryFact: (fact: string) => void;
@@ -132,7 +133,7 @@ export const useAppStore = create<AppStore>()(
       const exists = state.sessions.some((s) => s.id === id);
       const sessions = exists
         ? state.sessions.map((s) => (s.id === id ? session : s))
-        : [session, ...state.sessions].slice(0, 50);
+        : [session, ...state.sessions].slice(0, 500);
       return { sessions, activeSessionId: id };
     }),
   loadSession: (id) =>
@@ -162,7 +163,7 @@ export const useAppStore = create<AppStore>()(
       set((state) => {
         const dbIds = new Set(dbSessions.map((s) => s.id));
         const localOnly = state.sessions.filter((s) => !dbIds.has(s.id));
-        return { sessions: [...dbSessions, ...localOnly].slice(0, 50) };
+        return { sessions: [...dbSessions, ...localOnly].slice(0, 500) };
       });
     } catch {
       // Network failure — fall back to localStorage silently
@@ -181,6 +182,18 @@ export const useAppStore = create<AppStore>()(
         body: JSON.stringify(session),
       }).catch((e) => console.warn('[sessions] re-upload failed', e));
     });
+  },
+
+  // Claim all anonymous (pre-login) sessions from this device's IP for the logged-in user
+  claimIpSessions: async (token: string) => {
+    try {
+      await fetch('/api/sessions/claim', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    } catch {
+      // Non-critical — silently ignore network errors
+    }
   },
 
   setSessionTitle: (title) =>

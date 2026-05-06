@@ -12,13 +12,19 @@ function getClient(request: NextRequest) {
   });
 }
 
+function getIP(req: NextRequest): string {
+  return req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
+    ?? req.headers.get('x-real-ip')
+    ?? '';
+}
+
 // GET /api/sessions
 export async function GET(request: NextRequest) {
   const client = getClient(request);
   const { data: { user } } = await client.auth.getUser();
 
-  const query = client.from('sessions').select('*').order('created_at', { ascending: false }).limit(50);
-  // Logged-in users get their own sessions; anon gets user_id=null sessions
+  // No hard cap — return full history. 500 is a generous practical ceiling.
+  const query = client.from('sessions').select('*').order('created_at', { ascending: false }).limit(500);
   const { data, error } = user
     ? await query.eq('user_id', user.id)
     : await query.is('user_id', null);
@@ -44,8 +50,9 @@ export async function POST(request: NextRequest) {
   const client = getClient(request);
   const { data: { user } } = await client.auth.getUser();
   const session: ChatSession = await request.json();
+  const ip = !user ? getIP(request) : null;
 
-  const { error } = await client.from('sessions').upsert({
+  const row: Record<string, unknown> = {
     id: session.id,
     user_id: user?.id ?? null,
     title: session.title,
@@ -55,7 +62,16 @@ export async function POST(request: NextRequest) {
     provider_conversations: session.providerConversations,
     debate_conversation: session.debateConversation,
     created_at: session.timestamp,
-  });
+  };
+  if (ip) row.anon_ip = ip;
+
+  let { error } = await client.from('sessions').upsert(row);
+
+  // If anon_ip column doesn't exist yet (migration pending), retry without it
+  if (error?.message?.includes('anon_ip')) {
+    delete row.anon_ip;
+    ({ error } = await client.from('sessions').upsert(row));
+  }
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
