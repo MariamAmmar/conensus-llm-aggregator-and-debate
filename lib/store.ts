@@ -286,14 +286,37 @@ export const useAppStore = create<AppStore>()(
     {
       name: 'consensus-store',
       storage: createJSONStorage(() => localStorage),
-      // Only persist sessions and history — skip transient UI state
+      // Persist sessions, history, memory, preferences, and the current prompt.
+      // chatTurns/conversation are NOT persisted directly to avoid duplication —
+      // they're restored from the active session in the merge function below.
       partialize: (state) => ({
         sessions: state.sessions,
         activeSessionId: state.activeSessionId,
         history: state.history,
         userMemory: state.userMemory,
         userPreferences: state.userPreferences,
+        prompt: state.prompt,
       }),
+      // After page reload (e.g. OAuth redirect), restore the active session's turns
+      // and conversation context so the chat view is exactly as the user left it.
+      merge: (persistedState, currentState) => {
+        const stored = persistedState as Partial<AppStore> | null;
+        if (!stored) return currentState;
+        const base = { ...currentState, ...stored } as AppStore;
+        if (stored.activeSessionId && Array.isArray(stored.sessions)) {
+          const active = stored.sessions.find((s) => s.id === stored.activeSessionId);
+          if (active) {
+            // Clear any in-flight loading states from requests interrupted by the reload
+            base.chatTurns = active.turns.map((t) =>
+              t.loading ? { ...t, loading: false, error: 'Interrupted — please try again.' } : t
+            );
+            base.conversation = active.conversation ?? [];
+            base.providerConversations = active.providerConversations ?? {};
+            base.debateConversation = active.debateConversation ?? [];
+          }
+        }
+        return base;
+      },
     },
   ),
 );

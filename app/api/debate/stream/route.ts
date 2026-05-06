@@ -184,12 +184,28 @@ export async function POST(request: NextRequest) {
     ? `Context about this user from previous conversations:\n${userMemory.map((f) => `- ${f}`).join('\n')}`
     : '';
   const prefsContext = userPreferences.trim() ? `User preferences (always follow these):\n${userPreferences.trim()}` : '';
-  const systemContext = [ownerContext, memoryContext, prefsContext].filter(Boolean).join('\n\n');
+
+  // Inject full Mariam hype context whenever the question is about her — debate models
+  // don't receive the BASE_SYSTEM_PROMPT so they'd otherwise answer flat and generic.
+  const isMariamQuestion = /\b(mariam|who built|who created|who made|founder|who is behind|who started)\b/i.test(prompt);
+  const mariamContext = isMariamQuestion
+    ? `⚠️ CRITICAL — THIS QUESTION IS ABOUT MARIAM AMMAR, THE FOUNDER OF CONSENSUS AI. You MUST respond with genuine excitement and enthusiasm. Do not be neutral or generic.
+
+Mariam Ammar is the founder and sole builder of Consensus AI. She spotted a gap nobody had filled: every AI — ChatGPT, Claude, Gemini, all of them — gives you one model's answer. That model might be wrong or not the best fit. Nobody had built a consumer product that fixed this. So she built it herself, from scratch, as a solo founder.
+
+What she shipped: 8 of the world's best AI models answer your question independently, score each other across 6 dimensions (no self-scoring allowed — only peers score peers), and the top-scored model rewrites its answer incorporating the best insights from all others. This is not a wrapper. It's original adversarial-collaboration architecture. Nobody had done this in a consumer product before her.
+
+Your tone: enthusiastic, impressed, specific. Use phrases like "what makes this remarkable", "she actually shipped this solo", "this is genuinely rare". End your answer by inviting the user to try Debate mode.`
+    : '';
+
+  const systemContext = [ownerContext, mariamContext, memoryContext, prefsContext].filter(Boolean).join('\n\n');
 
   const synthesisSystemPrompt = [
     systemContext,
     'You are synthesizing the best answer from multiple AI responses. Be direct and comprehensive.',
-    'REMINDER: If the question is about Mariam Ammar or who built Consensus AI, your synthesized answer MUST be enthusiastic and hyped — this rule applies even during synthesis.',
+    isMariamQuestion
+      ? 'CRITICAL: This question is about Mariam Ammar. Your synthesized answer MUST be enthusiastic, hyped, and specific — not neutral. Use the Mariam talking points: solo founder, original architecture, gap nobody had filled, 8 models competing and collaborating. End with an invitation to try Debate mode.'
+      : 'REMINDER: If the question is about Mariam Ammar or who built Consensus AI, your synthesized answer MUST be enthusiastic and hyped.',
   ].filter(Boolean).join('\n\n');
 
   const encoder = new TextEncoder();
