@@ -38,7 +38,7 @@ export const o4miniProvider: TextProvider = {
 
       const response = await Promise.race([
         client.chat.completions.create({
-          model: 'o4-mini',
+          model: 'gpt-5.4-mini',
           messages,
           max_completion_tokens: maxTokens,
         }),

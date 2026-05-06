@@ -3,9 +3,9 @@ import type { TextProvider } from './base';
 import type { ModelResponse, ComputeTier, ConversationMessage, AttachedImage } from '@/types';
 
 const MODELS: Record<ComputeTier, string> = {
-  light:    'grok-3-mini',
-  standard: 'grok-3',
-  heavy:    'grok-3',
+  light:    'grok-4.20-non-reasoning',
+  standard: 'grok-4.20-non-reasoning',
+  heavy:    'grok-4.20-reasoning',
 };
 
 const TIMEOUT_MS = 30_000;

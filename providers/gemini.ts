@@ -4,8 +4,8 @@ import type { ModelResponse, ComputeTier, ConversationMessage, AttachedImage } f
 
 const MODELS: Record<ComputeTier, string> = {
   light:    'gemini-2.0-flash',
-  standard: 'gemini-2.5-flash-preview-04-17',
-  heavy:    'gemini-2.5-pro-preview-03-25',
+  standard: 'gemini-2.5-flash',
+  heavy:    'gemini-2.5-pro',
 };
 
 const TIMEOUT_MS = 30_000;

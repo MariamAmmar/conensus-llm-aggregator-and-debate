@@ -19,8 +19,8 @@ const PAID_DEBATE_LIMIT = 30;
 
 const OAI_COMPAT: Record<string, { apiKey: () => string; baseURL?: string; model: string; useCompletionTokens?: boolean }> = {
   openai:     { apiKey: () => process.env.OPENAI_API_KEY!,     model: 'gpt-4o' },
-  o4mini:     { apiKey: () => process.env.OPENAI_API_KEY!,     model: 'o4-mini', useCompletionTokens: true },
-  grok:       { apiKey: () => process.env.XAI_API_KEY!,        model: 'grok-3',             baseURL: 'https://api.x.ai/v1' },
+  o4mini:     { apiKey: () => process.env.OPENAI_API_KEY!,     model: 'gpt-5.4-mini', useCompletionTokens: true },
+  grok:       { apiKey: () => process.env.XAI_API_KEY!,        model: 'grok-4.20-non-reasoning', baseURL: 'https://api.x.ai/v1' },
   perplexity: { apiKey: () => process.env.PERPLEXITY_API_KEY!, model: 'sonar-pro',          baseURL: 'https://api.perplexity.ai' },
   llama:      { apiKey: () => process.env.GROQ_API_KEY!,       model: 'meta-llama/llama-4-scout-17b-16e-instruct', baseURL: 'https://api.groq.com/openai/v1' },
   deepseek:   { apiKey: () => process.env.DEEPSEEK_API_KEY!,   model: 'deepseek-reasoner',  baseURL: 'https://api.deepseek.com' },
