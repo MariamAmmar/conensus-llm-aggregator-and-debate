@@ -133,7 +133,7 @@ export const useAppStore = create<AppStore>()(
       const exists = state.sessions.some((s) => s.id === id);
       const sessions = exists
         ? state.sessions.map((s) => (s.id === id ? session : s))
-        : [session, ...state.sessions].slice(0, 500);
+        : [session, ...state.sessions].slice(0, 20);
       return { sessions, activeSessionId: id };
     }),
   loadSession: (id) =>
@@ -141,6 +141,7 @@ export const useAppStore = create<AppStore>()(
       const session = state.sessions.find((s) => s.id === id);
       if (!session) return {};
       return {
+        activeSessionId: id,
         chatTurns: session.turns,
         conversation: session.conversation,
         providerConversations: session.providerConversations,
@@ -163,7 +164,7 @@ export const useAppStore = create<AppStore>()(
       set((state) => {
         const dbIds = new Set(dbSessions.map((s) => s.id));
         const localOnly = state.sessions.filter((s) => !dbIds.has(s.id));
-        return { sessions: [...dbSessions, ...localOnly].slice(0, 500) };
+        return { sessions: [...dbSessions, ...localOnly].slice(0, 20) };
       });
     } catch {
       // Network failure — fall back to localStorage silently
@@ -271,8 +272,10 @@ export const useAppStore = create<AppStore>()(
       debateConversation: [
         ...state.debateConversation,
         { role: 'user' as const, content: userPrompt },
-        { role: 'assistant' as const, content: synthesizedResponse },
-      ].slice(-20),
+        // Truncate the stored synthesis to keep per-turn context compact — the full answer
+        // is in chatTurns; this copy is only used as history context for follow-up debates.
+        { role: 'assistant' as const, content: synthesizedResponse.length > 800 ? synthesizedResponse.slice(0, 800) + '…' : synthesizedResponse },
+      ].slice(-10),
     })),
   clearDebateConversation: () => set({ debateConversation: [] }),
 

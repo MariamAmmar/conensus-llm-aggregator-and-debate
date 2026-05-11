@@ -68,7 +68,6 @@ export default function Home() {
     addHistoryEntry,
     addConversationTurn,
     clearConversation,
-    addProviderTurn,
     clearProviderConversations,
     addDebateTurn,
     clearDebateConversation,
@@ -114,23 +113,26 @@ export default function Home() {
   // Sync sessions on load and whenever auth state changes (login/logout)
   useEffect(() => {
     if (user?.id && chatTurns.length > 0) saveSession();
-    syncSessionsFromDB();
 
-    // On login: claim any pre-login sessions from this IP, then re-upload local sessions.
-    if (user?.id && session?.access_token) {
-      claimIpSessions(session.access_token);
-      syncLocalSessionsToDB(session.access_token);
-    }
+    const token = session?.access_token;
+    if (user?.id && token) {
+      // On login: claim pre-login (IP-based) sessions first so the subsequent DB fetch
+      // sees them attributed to this user — avoids a race where sync wins the claim.
+      claimIpSessions(token).then(() => {
+        syncLocalSessionsToDB(token);
+        syncSessionsFromDB();
+      });
 
-    // Restore memory from Supabase user account on login
-    if (user?.id) {
+      // Restore memory from Supabase user account (doesn't need to wait for session claim)
       const saved = user.user_metadata?.memory_facts as import('@/types').MemoryFact[] | undefined;
       if (Array.isArray(saved) && saved.length > 0) mergeMemoryFacts(saved);
-      // Shrink any previously bloated JWT immediately — don't wait for the debounced sync
       const currentMemory = useAppStore.getState().userMemory;
       if (currentMemory.length > 0) {
         supabase.auth.updateUser({ data: { memory_facts: currentMemory.slice(0, 15) } }).catch(() => {});
       }
+    } else {
+      // Logged out or no token — fetch anonymous sessions keyed by null user_id
+      syncSessionsFromDB();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
@@ -203,8 +205,24 @@ export default function Home() {
     if (!userPrompt.trim() || !assistantResponse.trim()) return;
     const body = (data: object) => ({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
 
-    // Memory extraction
-    fetch('/api/memory', body({ turns: [{ prompt: userPrompt, response: assistantResponse }] }))
+    // Memory extraction — include recent turns so follow-up questions have context.
+    // A single isolated prompt like "what about the counter-argument?" is meaningless
+    // without knowing what topic was being debated. Pass up to 4 completed turns.
+    const completedTurns = useAppStore.getState().chatTurns
+      .filter((t) => !t.loading && t.result && !t.error)
+      .slice(-4)
+      .map((t) => ({
+        prompt: t.prompt,
+        // Cap each response at 600 chars — memory extraction needs topic context, not verbatim text
+        response: (t.result!.finalAnswer || t.result!.responses?.find((r) => r.content && !r.error)?.content || '').slice(0, 600),
+      }))
+      .filter((t) => t.prompt.trim() && t.response.trim());
+    const alreadyHasCurrent = completedTurns.some((t) => t.prompt === userPrompt);
+    const memoryTurns = alreadyHasCurrent
+      ? completedTurns
+      : [...completedTurns, { prompt: userPrompt, response: assistantResponse.slice(0, 600) }].slice(-4);
+
+    fetch('/api/memory', body({ turns: memoryTurns }))
       .then((r) => r.json()).then(({ facts }) => { if (facts?.length) mergeMemoryFacts(facts); }).catch(() => {});
 
     // Follow-up questions
@@ -400,15 +418,20 @@ ${el.innerHTML}
           const debateStart = Date.now();
           setStreamingDebate({ stage: 'collecting', responses: [], synthesisContent: '' });
 
+          // If the user switches from another mode into debate, debateConversation may be
+          // empty even though conversation has rich context. Fall back to conversation so
+          // the models know what has been discussed regardless of which mode was used before.
+          const debateHistory = debateConversation.length > 0 ? debateConversation : conversation.slice(-10);
+
           const res = await fetch('/api/debate/stream', {
             method: 'POST', headers, signal: abortRef.current.signal,
-            body: JSON.stringify({ prompt: submittedPrompt, history: debateConversation, userMemory: userMemory.map((f) => f.fact), userPreferences }),
+            body: JSON.stringify({ prompt: submittedPrompt, history: debateHistory, userMemory: userMemory.map((f) => f.fact), userPreferences }),
           });
 
           if (!res.ok) {
             let data: { code?: string; message?: string; error?: string } = {};
             try { data = await res.json(); } catch { /* non-JSON error body (e.g. 502/504) */ }
-            if (res.status === 429 && data.code === 'LIMIT_REACHED') { updateTurn(turnId, { loading: false, error: null }); setLoading(false); setShowLoginGate(true); setStreamingDebate(null); return; }
+            if (res.status === 429 && data.code === 'LIMIT_REACHED') { updateTurn(turnId, { loading: false, error: null }); setLoading(false); setStreamingDebate(null); saveSession(); setShowLoginGate(true); return; }
             if (res.status === 402 && data.code === 'SUBSCRIPTION_REQUIRED') { updateTurn(turnId, { loading: false, error: null }); setLoading(false); setShowTrialModal(true); setStreamingDebate(null); return; }
             throw new Error(data.message || data.error || `Debate request failed (${res.status})`);
           }
@@ -489,6 +512,7 @@ ${el.innerHTML}
 
           updateTurn(turnId, { result, loading: false });
           setStreamingDebate(null);
+          addDebateTurn(submittedPrompt, debateResult.synthesizedAnswer);
           addConversationTurn(submittedPrompt, debateResult.synthesizedAnswer);
           addHistoryEntry({ id: turnId, prompt: submittedPrompt, mode: 'debate', finalAnswer: debateResult.synthesizedAnswer, timestamp: new Date() });
           runPostTurnAgents(turnId, submittedPrompt, debateResult.synthesizedAnswer, chatTurns.length === 0);
@@ -504,7 +528,7 @@ ${el.innerHTML}
           if (!res.ok) {
             let data: { code?: string; message?: string; error?: string } = {};
             try { data = await res.json(); } catch { /* non-JSON error body (e.g. 502/504) */ }
-            if (res.status === 429 && data.code === 'LIMIT_REACHED') { updateTurn(turnId, { loading: false, error: null }); setLoading(false); setShowLoginGate(true); return; }
+            if (res.status === 429 && data.code === 'LIMIT_REACHED') { updateTurn(turnId, { loading: false, error: null }); setLoading(false); saveSession(); setShowLoginGate(true); return; }
             if (res.status === 402 && data.code === 'SUBSCRIPTION_REQUIRED') { updateTurn(turnId, { loading: false, error: null }); setLoading(false); setShowTrialModal(true); return; }
             // Image route or other — fall through to main route
             if (data.error?.toLowerCase().includes('image')) throw new Error('image-fallback');
@@ -553,7 +577,7 @@ ${el.innerHTML}
             body: JSON.stringify({ prompt: submittedPrompt, mode: selectedMode, imageProvider: selectedImageProvider, history: conversation, providerConversations, debateConversation, images, documents, userMemory: userMemory.map((f) => f.fact), userPreferences, selectedModels }),
           });
           const data = await res.json();
-          if (res.status === 429 && data.code === 'LIMIT_REACHED') { updateTurn(turnId, { loading: false, error: null }); setLoading(false); setShowLoginGate(true); return; }
+          if (res.status === 429 && data.code === 'LIMIT_REACHED') { updateTurn(turnId, { loading: false, error: null }); setLoading(false); saveSession(); setShowLoginGate(true); return; }
           if (res.status === 402 && data.code === 'SUBSCRIPTION_REQUIRED') { updateTurn(turnId, { loading: false, error: null }); setLoading(false); setShowTrialModal(true); return; }
           if (!res.ok) throw new Error(data.message || data.error || 'Request failed');
 
@@ -561,7 +585,7 @@ ${el.innerHTML}
           updateTurn(turnId, { result, loading: false });
 
           const isFirst = chatTurns.length === 0;
-          if (selectedMode === 'all') {
+          if (selectedMode === 'all' || result.mode === 'all') {
             const firstResponse = result.responses.find((r) => r.content && !r.error);
             if (firstResponse) { addConversationTurn(submittedPrompt, firstResponse.content); runPostTurnAgents(turnId, submittedPrompt, firstResponse.content, isFirst); }
           } else if (selectedMode !== 'image' && result.finalAnswer) {
